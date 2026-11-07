@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+build/
+dist/
+Bible Reader Ver 2/
+*_test_output/
+*.mp3
+*.playback.json
+개역개정.txt
+BibleReader V2.spec
