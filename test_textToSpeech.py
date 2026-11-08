@@ -1,4 +1,5 @@
 import asyncio
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,6 +8,7 @@ import pytest
 
 from textToSpeech import (
     TEST_AUDIO_MAX_BYTES,
+    _run,
     add_chapter_announcements,
     format_parenthetical_references,
     iter_chapters,
@@ -21,10 +23,16 @@ from textToSpeech import (
 
 
 def test_remove_verse_references():
-    source = "창1:1 <천지 창조> 태초에 하나님이 천지를 창조하시니라\n창 1:2 땅이 혼돈하고 공허하며"
+    source = (
+        "창1:1 <천지 창조> 태초에 하나님이 천지를 창조하시니라\n"
+        "창 1:2 땅이 혼돈하고 공허하며\n"
+        "대상16:12-13 그의 종 이스라엘"
+    )
 
     assert remove_verse_references(source) == (
-        "태초에 하나님이 천지를 창조하시니라\n땅이 혼돈하고 공허하며"
+        "태초에 하나님이 천지를 창조하시니라\n"
+        "땅이 혼돈하고 공허하며\n"
+        "그의 종 이스라엘"
     )
 
 
@@ -96,6 +104,12 @@ def test_iter_chapters_groups_verses_by_chapter():
             "창세기 일장.\n천지 창조\n태초에 하나님이 천지를 창조하시니라\n땅이 혼돈하고 공허하며",
         ),
         ("창세기", 2, "창세기 이장.\n천지와 만물이 다 이루어지니라"),
+    ]
+
+
+def test_iter_chapters_removes_range_verse_prefix():
+    assert list(iter_chapters(["대상16:12-13 그의 종 이스라엘"])) == [
+        ("역대상", 16, "역대상 십육장.\n그의 종 이스라엘")
     ]
 
 
@@ -176,6 +190,35 @@ def test_test_mode_keeps_chapter_files_and_total_without_playing(monkeypatch, tm
     assert not stale_chapter.exists()
     assert unrelated_mp3.read_bytes() == b"keep me"
     assert not list(tmp_path.glob(".staging-*"))
+
+
+def test_test_mode_replaces_all_contents_of_a_test_output(monkeypatch, tmp_path):
+    source_path = tmp_path / "input.txt"
+    source_path.write_text("창1:1 테스트 본문\n", encoding="utf-8")
+    output_dir = tmp_path / "a_test_output"
+    nested_dir = output_dir / "old-folder"
+    nested_dir.mkdir(parents=True)
+    (output_dir / "old.txt").write_text("remove me", encoding="utf-8")
+    (nested_dir / "old.mp3").write_bytes(b"remove me")
+
+    async def fake_stream_audio(text):
+        yield text.encode("utf-8")
+
+    monkeypatch.setattr("textToSpeech.stream_audio", fake_stream_audio)
+
+    asyncio.run(_run(source_path, None, None, test_mode=True, once=False))
+
+    marker_file = next(output_dir.glob("a_test_*.txt"))
+    assert {path.name for path in output_dir.iterdir()} == {
+        "0001_창세기_001.mp3",
+        "total.mp3",
+        marker_file.name,
+    }
+    assert not nested_dir.exists()
+    assert re.fullmatch(r"a_test_\d{8}_\d{6}\.txt", marker_file.name)
+    assert marker_file.read_bytes() == b""
+    assert (output_dir / "0001_창세기_001.mp3").read_bytes()
+    assert (output_dir / "total.mp3").read_bytes()
 
 
 def test_production_mode_removes_each_temporary_chapter_after_playback(

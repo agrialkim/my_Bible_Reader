@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import codecs
 import ctypes
+from datetime import datetime
 import json
 import os
 import queue
@@ -39,7 +40,8 @@ BOOK_NAMES = {
     "요이": "요한이서", "요삼": "요한삼서", "유": "유다서", "계": "요한계시록",
 }
 VERSE_PREFIX = re.compile(
-    r"^\s*(?P<book>[가-힣]{1,8})\s*(?P<chapter>\d{1,3})\s*:\s*\d{1,3}\s*(?:<(?P<title>[^>\r\n]*)>\s*)?"
+    r"^\s*(?P<book>[가-힣]{1,8})\s*(?P<chapter>\d{1,3})\s*:\s*"
+    r"\d{1,3}(?:\s*-\s*\d{1,3})?\s*(?:<(?P<title>[^>\r\n]*)>\s*)?"
 )
 CHAPTER_AUDIO_FILENAME = re.compile(r"\d{4}_.+_\d{3}\.mp3\Z")
 TEST_AUDIO_MAX_SECONDS = 180
@@ -629,6 +631,15 @@ def clear_generated_audio(output_dir: Path) -> None:
             audio_file.unlink()
 
 
+def clear_output_directory(output_dir: Path) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for entry in output_dir.iterdir():
+        if entry.is_dir() and not entry.is_symlink():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
+
+
 async def _process_chapters(
     lines: Iterable[str],
     output_dir: Path,
@@ -711,7 +722,14 @@ async def _run(
         return
 
     if test_mode or chapter_dir is not None:
-        output_dir = chapter_dir or file_path.with_name(f"{file_path.stem}_test_output")
+        if test_mode:
+            output_dir = file_path.with_name("a_test_output")
+            clear_output_directory(output_dir)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            (output_dir / f"a_test_{timestamp}.txt").touch()
+        else:
+            output_dir = chapter_dir
+        assert output_dir is not None
         with open_text_file(file_path) as input_file:
             await process_chapters(
                 input_file,
@@ -994,7 +1012,7 @@ def main() -> int:
         "--no-play",
         dest="test_mode",
         action="store_true",
-        help="약 3분 분량의 장별 MP3와 total.mp3만 저장하고 재생하지 않습니다.",
+        help="입력 파일 옆 a_test_output 내용을 비우고 약 3분 분량의 MP3를 저장합니다.",
     )
     parser.add_argument(
         "--once",
@@ -1018,7 +1036,7 @@ def main() -> int:
         if args.output is not None:
             print(f"음성 파일을 저장했습니다: {args.output}")
         elif args.test_mode or args.chapter_dir is not None:
-            output_dir = args.chapter_dir or args.file.with_name(f"{args.file.stem}_test_output")
+            output_dir = args.chapter_dir or args.file.with_name("a_test_output")
             print(f"장별 음성 파일을 저장했습니다: {output_dir}")
     except KeyboardInterrupt:
         print("\n사용자 요청으로 음성 읽기를 중지했습니다.")
