@@ -9,3 +9,7 @@ Bible Reader Ver 2/
 *.playback.json
 개역개정.txt
 BibleReader V2.spec
+*.iml
+.gradle/
+.idea/
+local.properties
