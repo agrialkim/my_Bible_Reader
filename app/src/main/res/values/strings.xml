@@ -1,3 +1,15 @@
 <resources>
     <string name="app_name">성경 읽기</string>
+    <string name="title_bible_reader">성경 읽기</string>
+    <string name="instructions">기본 제공 성경을 선택하거나 내 기기의 텍스트 파일로 장별 음성 오디오를 만듭니다.</string>
+    <string name="label_default_bibles">기본 제공 성경 목록</string>
+    <string name="btn_load_asset">불러오기</string>
+    <string name="btn_select_file">내 기기에서 파일 선택</string>
+    <string name="selected_file_none">선택된 파일 없음</string>
+    <string name="btn_generate">장별 음성 파일 만들기</string>
+    <string name="status_ready">준비됨</string>
+    <string name="btn_play">재생</string>
+    <string name="btn_pause">일시정지</string>
+    <string name="btn_stop">중지</string>
+    <string name="output_info">생성된 음성 파일은 음악/BibleReader 폴더에 WAV로 저장됩니다.</string>
 </resources>
