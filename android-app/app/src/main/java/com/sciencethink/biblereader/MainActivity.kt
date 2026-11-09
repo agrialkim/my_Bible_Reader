@@ -1,54 +1,41 @@
 package com.sciencethink.biblereader
 
 import android.app.Activity
-import android.content.ContentValues
 import android.content.Intent
-import android.media.MediaPlayer
-import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
-import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.view.View
 import android.view.WindowManager
+import android.widget.ArrayAdapter
 import android.widget.Button
-import android.widget.ProgressBar
+import android.widget.Spinner
 import android.widget.TextView
-import java.io.File
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
-import java.util.concurrent.Executors
 
 class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var textToSpeech: TextToSpeech
     private lateinit var selectedFileLabel: TextView
     private lateinit var statusLabel: TextView
-    private lateinit var progressBar: ProgressBar
+    private lateinit var assetSpinner: Spinner
+    private lateinit var voiceSpinner: Spinner
+    private lateinit var loadAssetButton: Button
     private lateinit var selectFileButton: Button
-    private lateinit var generateButton: Button
     private lateinit var playButton: Button
     private lateinit var pauseButton: Button
     private lateinit var stopButton: Button
-    private val ioExecutor = Executors.newSingleThreadExecutor()
-    private val audioUris = mutableListOf<Uri>()
+
     private var chapters: List<BibleChapter> = emptyList()
+    private var assetFiles: List<String> = emptyList()
+    private var koreanVoices: List<android.speech.tts.Voice> = emptyList()
     private var isTtsReady = false
-    @Volatile
-    private var isGenerating = false
-    @Volatile
-    private var currentUtteranceId: String? = null
+    private var isPlaying = false
+    private var isPaused = false
     private var currentChapterIndex = 0
-    private var generationToken = 0
-    private var runFolder = ""
-    private var player: MediaPlayer? = null
-    private var playbackIndex = 0
-    private var pausedForPlayback = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,20 +43,152 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
         selectedFileLabel = findViewById(R.id.selectedFile)
         statusLabel = findViewById(R.id.status)
-        progressBar = findViewById(R.id.progress)
-        generateButton = findViewById(R.id.generateButton)
+        assetSpinner = findViewById(R.id.assetSpinner)
+        voiceSpinner = findViewById(R.id.voiceSpinner)
+        loadAssetButton = findViewById(R.id.loadAssetButton)
+        selectFileButton = findViewById(R.id.selectFileButton)
         playButton = findViewById(R.id.playButton)
         pauseButton = findViewById(R.id.pauseButton)
         stopButton = findViewById(R.id.stopButton)
 
-        selectFileButton = findViewById(R.id.selectFileButton)
+        setupAssetSpinner()
+
+        loadAssetButton.setOnClickListener { loadSelectedAssetBible() }
         selectFileButton.setOnClickListener { selectTextFile() }
-        generateButton.setOnClickListener { startGeneration() }
         playButton.setOnClickListener { playOrResume() }
         pauseButton.setOnClickListener { pausePlayback() }
-        stopButton.setOnClickListener { stopAll() }
+        stopButton.setOnClickListener { stopPlayback() }
 
         textToSpeech = TextToSpeech(this, this)
+    }
+
+    private fun setupAssetSpinner() {
+        try {
+            val rawFiles = (assets.list("") ?: emptyArray()).filter { it.endsWith(".txt") }
+            val preferredOrder = listOf("개역개정.txt")
+            assetFiles = rawFiles.sortedWith(Comparator { a, b ->
+                val indexA = preferredOrder.indexOf(a)
+                val indexB = preferredOrder.indexOf(b)
+                if (indexA != -1 && indexB != -1) indexA.compareTo(indexB)
+                else if (indexA != -1) -1
+                else if (indexB != -1) 1
+                else a.compareTo(b)
+            })
+
+            if (assetFiles.isNotEmpty()) {
+                val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, assetFiles).apply {
+                    setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                }
+                assetSpinner.adapter = adapter
+                val defaultIndex = assetFiles.indexOf("개역개정.txt").takeIf { it >= 0 } ?: 0
+                assetSpinner.setSelection(defaultIndex)
+                loadAssetFile(assetFiles[defaultIndex])
+
+                assetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(
+                        parent: android.widget.AdapterView<*>?,
+                        view: View?,
+                        position: Int,
+                        id: Long
+                    ) {
+                        val fileName = assetFiles.getOrNull(position) ?: return
+                        if (chapters.isEmpty() || !selectedFileLabel.text.contains(fileName.removeSuffix(".txt"))) {
+                            stopPlayback()
+                            loadAssetFile(fileName)
+                        }
+                    }
+
+                    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+                }
+            } else {
+                selectedFileLabel.text = "기본 제공 성경 파일 없음"
+            }
+        } catch (_: Exception) {
+            assetFiles = emptyList()
+        }
+    }
+
+    private fun setupVoiceSpinner() {
+        try {
+            koreanVoices = textToSpeech.voices?.filter { it.locale.language == "ko" } ?: emptyList()
+            if (koreanVoices.isNotEmpty()) {
+                var femaleCount = 1
+                var maleCount = 1
+                var generalCount = 1
+
+                val voiceNames = koreanVoices.map { voice ->
+                    val lowerName = voice.name.lowercase(Locale.ROOT)
+                    when {
+                        lowerName.contains("female") || lowerName.contains("sunhi") ||
+                        lowerName.contains("heami") || lowerName.contains("zira") ||
+                        lowerName.contains("jimin") || lowerName.contains("seohyeon") ||
+                        lowerName.contains("yuna") || lowerName.contains("sora") -> {
+                            "여성 음성 ${femaleCount++}"
+                        }
+                        lowerName.contains("male") || lowerName.contains("injoon") ||
+                        lowerName.contains("hyunsu") || lowerName.contains("bongjin") ||
+                        lowerName.contains("david") || lowerName.contains("minsu") -> {
+                            "남성 음성 ${maleCount++}"
+                        }
+                        else -> {
+                            "음성 ${generalCount++}"
+                        }
+                    }
+                }
+
+                val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, voiceNames).apply {
+                    setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                }
+                voiceSpinner.adapter = adapter
+
+                // Keep ko-kr-x-kob-local as default if present, or index 0
+                val defaultIndex = koreanVoices.indexOfFirst {
+                    it.name.contains("ko-kr-x-kob-local", ignoreCase = true)
+                }.takeIf { it >= 0 } ?: 0
+
+                voiceSpinner.setSelection(defaultIndex)
+                koreanVoices.getOrNull(defaultIndex)?.let { defaultVoice ->
+                    textToSpeech.voice = defaultVoice
+                }
+
+                voiceSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                        koreanVoices.getOrNull(position)?.let { selectedVoice ->
+                            textToSpeech.voice = selectedVoice
+                        }
+                    }
+                    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+                }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun loadSelectedAssetBible() {
+        val selectedIndex = assetSpinner.selectedItemPosition
+        val fileName = assetFiles.getOrNull(selectedIndex) ?: return
+        stopPlayback()
+        loadAssetFile(fileName)
+    }
+
+    private fun loadAssetFile(fileName: String) {
+        try {
+            val bytes = assets.open(fileName).use { it.readBytes() }
+            val text = decodeText(bytes)
+            chapters = BibleTextParser.parse(text)
+            currentChapterIndex = 0
+            val displayName = fileName.removeSuffix(".txt")
+            selectedFileLabel.text = displayName
+            statusLabel.text = "$displayName 파일을 불러왔습니다. 재생 버튼을 누르세요."
+            updateButtons()
+        } catch (error: Exception) {
+            chapters = emptyList()
+            currentChapterIndex = 0
+            val displayName = fileName.removeSuffix(".txt")
+            selectedFileLabel.text = "파일 읽기 실패: $displayName"
+            statusLabel.text = error.message ?: "$displayName 파일을 읽지 못했습니다."
+            updateButtons()
+        }
     }
 
     override fun onInit(status: Int) {
@@ -87,64 +206,65 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
 
         isTtsReady = true
-        statusLabel.text = "한국어 음성 준비됨"
+        setupVoiceSpinner()
+        statusLabel.text = "한국어 음성 준비됨. 목소리를 선택하고 재생하세요."
         updateButtons()
+
         textToSpeech.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
+                if (!isPlaying) return
+                val parts = utteranceId?.split("-") ?: return
+                val chapIdx = when {
+                    utteranceId.startsWith("chapter-done-") -> utteranceId.substringAfter("chapter-done-").toIntOrNull()
+                    utteranceId.startsWith("chapter-line-") -> parts.getOrNull(2)?.toIntOrNull()
+                    else -> null
+                }
+                if (chapIdx != null && chapIdx != currentChapterIndex) {
+                    currentChapterIndex = chapIdx
+                }
                 runOnUiThread {
                     val chapter = chapters.getOrNull(currentChapterIndex)
-                    if (isGenerating && utteranceId == currentUtteranceId && chapter != null) {
+                    if (isPlaying && chapter != null) {
                         statusLabel.text =
-                            "음성 생성 중 ${currentChapterIndex + 1}/${chapters.size}: ${chapter.book} ${chapter.number}장"
+                            "재생 중 ${currentChapterIndex + 1}/${chapters.size}: ${chapter.book} ${chapter.number}장"
                     }
                 }
             }
 
             override fun onDone(utteranceId: String?) {
-                if (!isGenerating || utteranceId != currentUtteranceId) return
-                val completedIndex = currentChapterIndex
-                val completedRunFolder = runFolder
-                val file = tempAudioFile(completedIndex)
-                val fileName = audioFileName(completedIndex)
-                ioExecutor.execute {
-                    try {
-                        val uri = publishAudio(file, fileName, completedRunFolder)
+                if (!isPlaying) return
+                if (utteranceId?.startsWith("chapter-done-") == true) {
+                    val finishedChapIdx = utteranceId.substringAfter("chapter-done-").toIntOrNull()
+                    if (finishedChapIdx == currentChapterIndex) {
                         runOnUiThread {
-                            if (!isGenerating || utteranceId != currentUtteranceId) {
-                                contentResolver.delete(uri, null, null)
-                                file.delete()
-                                return@runOnUiThread
-                            }
-                            audioUris.add(uri)
-                            file.delete()
+                            if (!isPlaying) return@runOnUiThread
                             currentChapterIndex++
-                            if (isGenerating && currentChapterIndex < chapters.size) {
-                                synthesizeCurrentChapter()
-                            } else if (isGenerating) {
-                                isGenerating = false
-                                currentUtteranceId = null
+                            if (currentChapterIndex < chapters.size) {
+                                playCurrentChapter()
+                            } else {
+                                isPlaying = false
+                                isPaused = false
+                                currentChapterIndex = 0
                                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                                progressBar.progress = 100
-                                progressBar.visibility = View.GONE
-                                statusLabel.text =
-                                    "${audioUris.size}개 장별 WAV 파일을 음악/BibleReader/$runFolder 에 저장했습니다."
+                                statusLabel.text = "성경 읽기가 완료되었습니다."
                                 updateButtons()
                             }
-                        }
-                    } catch (error: Exception) {
-                        file.delete()
-                        runOnUiThread {
-                            if (isGenerating) failGeneration("파일 저장 실패: ${error.message}")
                         }
                     }
                 }
             }
 
+            @Suppress("DEPRECATION")
             override fun onError(utteranceId: String?) {
-                if (isGenerating && utteranceId == currentUtteranceId) {
+                if (isPlaying) {
                     runOnUiThread {
-                        if (isGenerating && utteranceId == currentUtteranceId) {
-                            failGeneration("한국어 음성을 생성하지 못했습니다.")
+                        if (isPlaying) {
+                            isPlaying = false
+                            isPaused = false
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                            textToSpeech.stop()
+                            statusLabel.text = "한국어 음성을 재생하지 못했습니다."
+                            updateButtons()
                         }
                     }
                 }
@@ -169,14 +289,16 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
                 ?: error("선택한 파일을 읽을 수 없습니다.")
             val text = decodeText(bytes)
+            stopPlayback()
             chapters = BibleTextParser.parse(text)
-            audioUris.clear()
-            selectedFileLabel.text = "${uri.lastPathSegment ?: "선택한 파일"} · ${chapters.size}개 장"
-            statusLabel.text =
-                "파일을 읽었습니다. 설치된 한국어 TTS 음성에 따라 오프라인 생성이 가능합니다."
+            currentChapterIndex = 0
+            val rawName = uri.lastPathSegment ?: "선택한 파일"
+            selectedFileLabel.text = rawName.removeSuffix(".txt")
+            statusLabel.text = "파일을 읽었습니다. 재생 버튼을 누르세요."
             updateButtons()
         } catch (error: Exception) {
             chapters = emptyList()
+            currentChapterIndex = 0
             selectedFileLabel.text = "선택된 파일 없음"
             statusLabel.text = error.message ?: "텍스트 파일을 읽지 못했습니다."
             updateButtons()
@@ -208,202 +330,95 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun startGeneration() {
-        if (!isTtsReady || chapters.isEmpty() || isGenerating) return
-        stopPlayer()
-        audioUris.clear()
-        currentChapterIndex = 0
-        generationToken++
-        runFolder = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
-            .plus("_$generationToken")
-        isGenerating = true
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        progressBar.progress = 0
-        progressBar.visibility = View.VISIBLE
-        statusLabel.text = "음성 생성 준비 중..."
-        updateButtons()
-        synthesizeCurrentChapter()
-    }
-
-    private fun synthesizeCurrentChapter() {
-        if (!isGenerating || currentChapterIndex >= chapters.size) return
-        val chapter = chapters[currentChapterIndex]
-        val file = tempAudioFile(currentChapterIndex)
-        val utteranceId = "$runFolder-chapter-$currentChapterIndex"
-        currentUtteranceId = utteranceId
-        file.parentFile?.mkdirs()
-        val result = textToSpeech.synthesizeToFile(
-            chapter.text,
-            Bundle(),
-            file,
-            utteranceId
-        )
-        if (result == TextToSpeech.ERROR) {
-            failGeneration("음성 합성을 시작하지 못했습니다.")
-        } else {
-            progressBar.progress = (currentChapterIndex * 100) / chapters.size
-        }
-    }
-
-    private fun tempAudioFile(index: Int): File =
-        File(cacheDir, "bible-reader-$runFolder/${audioFileName(index)}")
-
-    private fun audioFileName(index: Int): String {
-        val chapter = chapters[index]
-        return "%04d_%s_%03d.wav".format(Locale.ROOT, index + 1, chapter.book, chapter.number)
-    }
-
-    private fun publishAudio(source: File, fileName: String, folder: String): Uri {
-        check(source.isFile && source.length() > 0) { "음성 데이터가 생성되지 않았습니다." }
-        val values = ContentValues().apply {
-            put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
-            put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav")
-            put(
-                MediaStore.Audio.Media.RELATIVE_PATH,
-                "${Environment.DIRECTORY_MUSIC}/BibleReader/$folder"
-            )
-            put(MediaStore.Audio.Media.IS_PENDING, 1)
-        }
-        val uri = contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
-            ?: error("음성 파일 저장 위치를 만들지 못했습니다.")
-        try {
-            contentResolver.openOutputStream(uri, "w")?.use { output ->
-                source.inputStream().use { input -> input.copyTo(output) }
-            } ?: error("음성 파일을 쓸 수 없습니다.")
-            contentResolver.update(
-                uri,
-                ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 0) },
-                null,
-                null
-            )
-            return uri
-        } catch (error: Exception) {
-            contentResolver.delete(uri, null, null)
-            throw error
-        }
-    }
-
-    private fun failGeneration(message: String) {
-        isGenerating = false
-        currentUtteranceId = null
-        textToSpeech.stop()
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        File(cacheDir, "bible-reader-$runFolder").deleteRecursively()
-        progressBar.visibility = View.GONE
-        statusLabel.text = message
-        updateButtons()
-    }
-
     private fun playOrResume() {
-        if (pausedForPlayback) {
-            player?.start()
-            pausedForPlayback = false
+        if (!isTtsReady || chapters.isEmpty()) return
+        if (isPaused) {
+            isPaused = false
+            isPlaying = true
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            playCurrentChapter()
             statusLabel.text = "재생 중"
             updateButtons()
             return
         }
-        if (audioUris.isEmpty()) return
-        if (playbackIndex >= audioUris.size) playbackIndex = 0
-        playAt(playbackIndex)
+        if (isPlaying) return
+
+        isPlaying = true
+        isPaused = false
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (currentChapterIndex >= chapters.size) currentChapterIndex = 0
+        playCurrentChapter()
+        updateButtons()
     }
 
-    private fun playAt(index: Int) {
-        if (index >= audioUris.size) {
-            statusLabel.text = "재생이 끝났습니다."
-            playbackIndex = 0
-            updateButtons()
+    private fun playCurrentChapter() {
+        if (!isPlaying || currentChapterIndex >= chapters.size) return
+        val chapter = chapters[currentChapterIndex]
+        val lines = chapter.text.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+        if (lines.isEmpty()) {
+            currentChapterIndex++
+            playCurrentChapter()
             return
         }
-        stopPlayer()
-        playbackIndex = index
-        val nextPlayer = MediaPlayer()
-        player = nextPlayer
-        try {
-            nextPlayer.setDataSource(this, audioUris[index])
-            nextPlayer.setOnPreparedListener {
-                it.start()
-                statusLabel.text = "재생 중 ${index + 1}/${audioUris.size}"
-                updateButtons()
+
+        for ((lineIndex, line) in lines.withIndex()) {
+            val queueMode = if (lineIndex == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+            val isLastLine = (lineIndex == lines.size - 1)
+            val utteranceId = if (isLastLine) {
+                "chapter-done-$currentChapterIndex"
+            } else {
+                "chapter-line-$currentChapterIndex-$lineIndex"
             }
-            nextPlayer.setOnCompletionListener {
-                it.release()
-                player = null
-                playbackIndex++
-                playAt(playbackIndex)
-            }
-            nextPlayer.setOnErrorListener { failedPlayer, _, _ ->
-                failedPlayer.release()
-                player = null
-                statusLabel.text = "음성 파일을 재생하지 못했습니다."
-                updateButtons()
-                true
-            }
-            nextPlayer.prepareAsync()
-            statusLabel.text = "재생 준비 중 ${index + 1}/${audioUris.size}"
-            updateButtons()
-        } catch (error: Exception) {
-            stopPlayer()
-            statusLabel.text = "재생 오류: ${error.message}"
-            updateButtons()
+
+            textToSpeech.speak(
+                line,
+                queueMode,
+                null,
+                utteranceId
+            )
         }
     }
 
     private fun pausePlayback() {
-        val activePlayer = player ?: return
-        if (activePlayer.isPlaying) {
-            activePlayer.pause()
-            pausedForPlayback = true
-            statusLabel.text = "일시정지"
-            updateButtons()
-        }
-    }
-
-    private fun stopAll() {
-        if (isGenerating) {
-            isGenerating = false
-            currentUtteranceId = null
-            generationToken++
-            textToSpeech.stop()
-            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            File(cacheDir, "bible-reader-$runFolder").deleteRecursively()
-            progressBar.visibility = View.GONE
-            statusLabel.text = "음성 생성이 중지되었습니다."
-        }
-        stopPlayer()
-        playbackIndex = 0
+        if (!isPlaying) return
+        textToSpeech.stop()
+        isPlaying = false
+        isPaused = true
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val chapter = chapters.getOrNull(currentChapterIndex)
+        val chapterDesc = if (chapter != null) "${chapter.book} ${chapter.number}장" else "${currentChapterIndex + 1}번째"
+        statusLabel.text = "일시정지 ($chapterDesc 위치)"
         updateButtons()
     }
 
-    private fun stopPlayer() {
-        player?.let {
-            try {
-                it.stop()
-            } catch (_: IllegalStateException) {
-            }
-            it.release()
-        }
-        player = null
-        pausedForPlayback = false
+    private fun stopPlayback() {
+        isPlaying = false
+        isPaused = false
+        currentChapterIndex = 0
+        textToSpeech.stop()
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        statusLabel.text = "정지됨 (처음으로 초기화됨)"
+        updateButtons()
     }
 
     private fun updateButtons() {
-        selectFileButton.isEnabled = !isGenerating
-        generateButton.isEnabled = isTtsReady && chapters.isNotEmpty() && !isGenerating
-        playButton.isEnabled = audioUris.isNotEmpty() && !isGenerating
-        pauseButton.isEnabled = player?.isPlaying == true
-        stopButton.isEnabled = isGenerating || player != null
+        assetSpinner.isEnabled = !isPlaying && !isPaused
+        voiceSpinner.isEnabled = !isPlaying && !isPaused
+        loadAssetButton.isEnabled = !isPlaying && !isPaused && assetFiles.isNotEmpty()
+        selectFileButton.isEnabled = !isPlaying && !isPaused
+        playButton.isEnabled = isTtsReady && chapters.isNotEmpty() && (!isPlaying || isPaused)
+        pauseButton.isEnabled = isPlaying
+        stopButton.isEnabled = isPlaying || isPaused
     }
 
     override fun onDestroy() {
-        isGenerating = false
-        currentUtteranceId = null
-        if (::textToSpeech.isInitialized) textToSpeech.stop()
-        stopPlayer()
+        isPlaying = false
+        isPaused = false
         if (::textToSpeech.isInitialized) {
+            textToSpeech.stop()
             textToSpeech.shutdown()
         }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        ioExecutor.shutdownNow()
         super.onDestroy()
     }
 
