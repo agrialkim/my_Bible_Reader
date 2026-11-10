@@ -18,12 +18,16 @@ class BibleTextParserTest {
 
         assertEquals(3, chapters.size)
         assertEquals(
-            "역대상 십육장.\n그의 종 이스라엘",
+            "역대상 16장\n12-13 그의 종 이스라엘",
             chapters[1].text
         )
         assertEquals(
-            "사사기 일장.\n옷니엘이 드빌을 치다(여호수아 십오장 십삼에서 십구절)\n드빌의 주민들을 쳤으니",
+            "사사기 1장\n옷니엘이 드빌을 치다(수 15:13-19)\n11 드빌의 주민들을 쳤으니",
             chapters[2].text
+        )
+        assertEquals(
+            "사사기 일장.\n옷니엘이 드빌을 치다(여호수아 십오장 십삼에서 십구절)\n드빌의 주민들을 쳤으니",
+            chapters[2].spokenText
         )
     }
 
@@ -41,7 +45,7 @@ class BibleTextParserTest {
         assertEquals("창세기", chapters[0].book)
         assertEquals(1, chapters[0].number)
         assertEquals(
-            "창세기 일장.\n천지 창조\n태초에 하나님이 천지를 창조하시니라\n땅이 혼돈하고 공허하며 깊음 위에 있고 하나님의 영은 수면 위에 운행하시니라",
+            "창세기 1장\n천지 창조\n1 태초에 하나님이 천지를 창조하시니라\n2 땅이 혼돈하고 공허하며 깊음 위에 있고 하나님의 영은 수면 위에 운행하시니라",
             chapters[0].text
         )
 
@@ -68,12 +72,11 @@ class BibleTextParserTest {
         chapters.forEachIndexed { index, chapter ->
             val fileName = "%04d_%s_%03d.mp3".format(index + 1, chapter.book, chapter.number)
             val outputFile = File(resultDir, fileName)
-            synthesizeAudio(chapter.text, outputFile)
+            synthesizeAudio(chapter.spokenText, outputFile)
             assertTrue(outputFile.exists() && outputFile.length() > 0)
-            fullTextBuilder.append(chapter.text).append("\n\n")
+            fullTextBuilder.append(chapter.spokenText).append("\n\n")
         }
 
-        // 전체 합쳐진 음성 파일 (테스트 수행 시간 타임스탬프 MP3 파일 생성 ex: 20261110_072124.mp3)
         val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
         val combinedMp3 = File(resultDir, "${timestamp}.mp3")
         synthesizeAudio(fullTextBuilder.toString(), combinedMp3)
