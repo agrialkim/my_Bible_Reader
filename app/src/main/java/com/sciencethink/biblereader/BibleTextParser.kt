@@ -1,6 +1,11 @@
 package com.sciencethink.biblereader
 
-data class BibleChapter(val book: String, val number: Int, val text: String)
+data class BibleChapter(
+    val book: String,
+    val number: Int,
+    val text: String,
+    val spokenText: String
+)
 
 object BibleTextParser {
     private val bookNames = mapOf(
@@ -25,7 +30,7 @@ object BibleTextParser {
     )
 
     private val versePrefix = Regex(
-        """^\s*([가-힣]{1,8})\s*(\d{1,3})\s*:\s*\d{1,3}(?:\s*-\s*\d{1,3})?\s*(?:<([^>\r\n]*)>\s*)?"""
+        """^\s*([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\s*(?:<([^>\r\n]*)>\s*)?"""
     )
     private val parentheticalReference = Regex(
         """\(([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\)"""
@@ -35,44 +40,69 @@ object BibleTextParser {
         val chapters = mutableListOf<BibleChapter>()
         var currentBook: String? = null
         var currentNumber: Int? = null
-        var chapterLines = mutableListOf<String>()
-        val leadingLines = mutableListOf<String>()
+        var displayTextLines = mutableListOf<String>()
+        var spokenTextLines = mutableListOf<String>()
+        val leadingDisplayLines = mutableListOf<String>()
+        val leadingSpokenLines = mutableListOf<String>()
 
         for (line in source.lineSequence()) {
             val match = versePrefix.find(line)
             if (match == null) {
-                val cleaned = formatReferences(line.trim())
-                if (cleaned.isNotEmpty()) {
-                    if (currentBook == null) leadingLines.add(cleaned) else chapterLines.add(cleaned)
+                val cleanedDisplay = line.trim()
+                val cleanedSpoken = formatReferences(line.trim())
+                if (cleanedDisplay.isNotEmpty()) {
+                    if (currentBook == null) {
+                        leadingDisplayLines.add(cleanedDisplay)
+                        leadingSpokenLines.add(cleanedSpoken)
+                    } else {
+                        displayTextLines.add(cleanedDisplay)
+                        spokenTextLines.add(cleanedSpoken)
+                    }
                 }
                 continue
             }
 
             val abbreviation = match.groupValues[1]
             val chapter = match.groupValues[2].toInt()
+            val startVerse = match.groupValues[3]
+            val endVerse = match.groupValues[4]
+            val verseNumDisplay = if (endVerse.isNotEmpty()) "$startVerse-$endVerse" else startVerse
+
             if (abbreviation != currentBook || chapter != currentNumber) {
                 if (currentBook != null && currentNumber != null) {
                     chapters.add(
                         BibleChapter(
                             bookNames[currentBook] ?: currentBook,
                             currentNumber,
-                            chapterLines.joinToString("\n")
+                            displayTextLines.joinToString("\n"),
+                            spokenTextLines.joinToString("\n")
                         )
                     )
                 }
 
                 currentBook = abbreviation
                 currentNumber = chapter
-                chapterLines = leadingLines.toMutableList()
-                leadingLines.clear()
+                displayTextLines = leadingDisplayLines.toMutableList()
+                spokenTextLines = leadingSpokenLines.toMutableList()
+                leadingDisplayLines.clear()
+                leadingSpokenLines.clear()
+
                 val bookName = bookNames[abbreviation] ?: abbreviation
-                chapterLines.add("$bookName ${numberToKorean(chapter)}장.")
+                displayTextLines.add("$bookName ${chapter}장")
+                spokenTextLines.add("$bookName ${numberToKorean(chapter)}장.")
             }
 
-            val title = match.groupValues.getOrNull(3).orEmpty().trim()
-            if (title.isNotEmpty()) chapterLines.add(formatReferences(title))
-            val verseText = formatReferences(line.substring(match.range.last + 1).trim())
-            if (verseText.isNotEmpty()) chapterLines.add(verseText)
+            val title = match.groupValues.getOrNull(5).orEmpty().trim()
+            if (title.isNotEmpty()) {
+                displayTextLines.add(title)
+                spokenTextLines.add(formatReferences(title))
+            }
+
+            val rawVerse = line.substring(match.range.last + 1).trim()
+            if (rawVerse.isNotEmpty()) {
+                displayTextLines.add("$verseNumDisplay $rawVerse")
+                spokenTextLines.add(formatReferences(rawVerse))
+            }
         }
 
         if (currentBook != null && currentNumber != null) {
@@ -80,7 +110,8 @@ object BibleTextParser {
                 BibleChapter(
                     bookNames[currentBook] ?: currentBook,
                     currentNumber,
-                    chapterLines.joinToString("\n")
+                    displayTextLines.joinToString("\n"),
+                    spokenTextLines.joinToString("\n")
                 )
             )
         }

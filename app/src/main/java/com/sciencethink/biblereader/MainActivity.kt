@@ -1,15 +1,16 @@
 package com.sciencethink.biblereader
 
+import android.animation.ValueAnimator
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import android.view.View
 import android.view.WindowManager
-import android.widget.ArrayAdapter
-import android.widget.Button
-import android.widget.Spinner
+import android.view.animation.LinearInterpolator
+import android.widget.ImageButton
+import android.widget.ScrollView
 import android.widget.TextView
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
@@ -19,15 +20,14 @@ import java.util.Locale
 
 class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var textToSpeech: TextToSpeech
-    private lateinit var selectedFileLabel: TextView
-    private lateinit var statusLabel: TextView
-    private lateinit var assetSpinner: Spinner
-    private lateinit var voiceSpinner: Spinner
-    private lateinit var loadAssetButton: Button
-    private lateinit var selectFileButton: Button
-    private lateinit var playButton: Button
-    private lateinit var pauseButton: Button
-    private lateinit var stopButton: Button
+    private lateinit var searchIconButton: ImageButton
+    private lateinit var bibleTitleTextView: TextView
+    private lateinit var settingsIconButton: ImageButton
+    private lateinit var bibleScrollView: ScrollView
+    private lateinit var bibleTextView: TextView
+    private lateinit var playPauseToggleButton: ImageButton
+    private lateinit var currentPositionTextView: TextView
+    private lateinit var utilityIconButton: ImageButton
 
     private var chapters: List<BibleChapter> = emptyList()
     private var assetFiles: List<String> = emptyList()
@@ -36,36 +36,40 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var isPlaying = false
     private var isPaused = false
     private var currentChapterIndex = 0
+    private var scrollAnimator: ValueAnimator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        selectedFileLabel = findViewById(R.id.selectedFile)
-        statusLabel = findViewById(R.id.status)
-        assetSpinner = findViewById(R.id.assetSpinner)
-        voiceSpinner = findViewById(R.id.voiceSpinner)
-        loadAssetButton = findViewById(R.id.loadAssetButton)
-        selectFileButton = findViewById(R.id.selectFileButton)
-        playButton = findViewById(R.id.playButton)
-        pauseButton = findViewById(R.id.pauseButton)
-        stopButton = findViewById(R.id.stopButton)
+        searchIconButton = findViewById(R.id.searchIconButton)
+        bibleTitleTextView = findViewById(R.id.bibleTitleTextView)
+        settingsIconButton = findViewById(R.id.settingsIconButton)
+        bibleScrollView = findViewById(R.id.bibleScrollView)
+        bibleTextView = findViewById(R.id.bibleTextView)
+        playPauseToggleButton = findViewById(R.id.playPauseToggleButton)
+        currentPositionTextView = findViewById(R.id.currentPositionTextView)
+        utilityIconButton = findViewById(R.id.utilityIconButton)
 
-        setupAssetSpinner()
+        loadInitialAsset()
 
-        loadAssetButton.setOnClickListener { loadSelectedAssetBible() }
-        selectFileButton.setOnClickListener { selectTextFile() }
-        playButton.setOnClickListener { playOrResume() }
-        pauseButton.setOnClickListener { pausePlayback() }
-        stopButton.setOnClickListener { stopPlayback() }
+        searchIconButton.setOnClickListener { selectTextFile() }
+        settingsIconButton.setOnClickListener {
+            val intent = Intent(this, SettingsActivity::class.java)
+            startActivityForResult(intent, REQUEST_SETTINGS)
+        }
+        playPauseToggleButton.setOnClickListener { playOrPauseToggle() }
+        utilityIconButton.setOnClickListener {
+            // Utility action
+        }
 
         textToSpeech = TextToSpeech(this, this)
     }
 
-    private fun setupAssetSpinner() {
+    private fun loadInitialAsset() {
         try {
             val rawFiles = (assets.list("") ?: emptyArray()).filter { it.endsWith(".txt") }
-            val preferredOrder = listOf("개역개정.txt")
+            val preferredOrder = listOf("개역개정.txt", "KJV.txt", "새번역.txt")
             assetFiles = rawFiles.sortedWith(Comparator { a, b ->
                 val indexA = preferredOrder.indexOf(a)
                 val indexB = preferredOrder.indexOf(b)
@@ -75,100 +79,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 else a.compareTo(b)
             })
 
-            if (assetFiles.isNotEmpty()) {
-                val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, assetFiles).apply {
-                    setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-                }
-                assetSpinner.adapter = adapter
-                val defaultIndex = assetFiles.indexOf("개역개정.txt").takeIf { it >= 0 } ?: 0
-                assetSpinner.setSelection(defaultIndex)
-                loadAssetFile(assetFiles[defaultIndex])
+            val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
+            val savedIndex = prefs.getInt("asset_index", 0).coerceIn(0, (assetFiles.size - 1).coerceAtLeast(0))
+            val fileName = assetFiles.getOrNull(savedIndex) ?: "개역개정.txt"
 
-                assetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-                    override fun onItemSelected(
-                        parent: android.widget.AdapterView<*>?,
-                        view: View?,
-                        position: Int,
-                        id: Long
-                    ) {
-                        val fileName = assetFiles.getOrNull(position) ?: return
-                        if (chapters.isEmpty() || !selectedFileLabel.text.contains(fileName.removeSuffix(".txt"))) {
-                            stopPlayback()
-                            loadAssetFile(fileName)
-                        }
-                    }
-
-                    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-                }
-            } else {
-                selectedFileLabel.text = "기본 제공 성경 파일 없음"
-            }
+            loadAssetFile(fileName)
         } catch (_: Exception) {
-            assetFiles = emptyList()
+            bibleTextView.text = "성경 본문을 불러오지 못했습니다."
         }
-    }
-
-    private fun setupVoiceSpinner() {
-        try {
-            koreanVoices = textToSpeech.voices?.filter { it.locale.language == "ko" } ?: emptyList()
-            if (koreanVoices.isNotEmpty()) {
-                var femaleCount = 1
-                var maleCount = 1
-                var generalCount = 1
-
-                val voiceNames = koreanVoices.map { voice ->
-                    val lowerName = voice.name.lowercase(Locale.ROOT)
-                    when {
-                        lowerName.contains("female") || lowerName.contains("sunhi") ||
-                        lowerName.contains("heami") || lowerName.contains("zira") ||
-                        lowerName.contains("jimin") || lowerName.contains("seohyeon") ||
-                        lowerName.contains("yuna") || lowerName.contains("sora") -> {
-                            "여성 음성 ${femaleCount++}"
-                        }
-                        lowerName.contains("male") || lowerName.contains("injoon") ||
-                        lowerName.contains("hyunsu") || lowerName.contains("bongjin") ||
-                        lowerName.contains("david") || lowerName.contains("minsu") -> {
-                            "남성 음성 ${maleCount++}"
-                        }
-                        else -> {
-                            "음성 ${generalCount++}"
-                        }
-                    }
-                }
-
-                val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, voiceNames).apply {
-                    setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-                }
-                voiceSpinner.adapter = adapter
-
-                // Keep ko-kr-x-kob-local as default if present, or index 0
-                val defaultIndex = koreanVoices.indexOfFirst {
-                    it.name.contains("ko-kr-x-kob-local", ignoreCase = true)
-                }.takeIf { it >= 0 } ?: 0
-
-                voiceSpinner.setSelection(defaultIndex)
-                koreanVoices.getOrNull(defaultIndex)?.let { defaultVoice ->
-                    textToSpeech.voice = defaultVoice
-                }
-
-                voiceSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-                    override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                        koreanVoices.getOrNull(position)?.let { selectedVoice ->
-                            textToSpeech.voice = selectedVoice
-                        }
-                    }
-                    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-                }
-            }
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun loadSelectedAssetBible() {
-        val selectedIndex = assetSpinner.selectedItemPosition
-        val fileName = assetFiles.getOrNull(selectedIndex) ?: return
-        stopPlayback()
-        loadAssetFile(fileName)
     }
 
     private fun loadAssetFile(fileName: String) {
@@ -178,22 +96,67 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             chapters = BibleTextParser.parse(text)
             currentChapterIndex = 0
             val displayName = fileName.removeSuffix(".txt")
-            selectedFileLabel.text = displayName
-            statusLabel.text = "$displayName 파일을 불러왔습니다. 재생 버튼을 누르세요."
-            updateButtons()
+            bibleTitleTextView.text = displayName
+            updateCurrentChapterDisplay()
         } catch (error: Exception) {
             chapters = emptyList()
             currentChapterIndex = 0
-            val displayName = fileName.removeSuffix(".txt")
-            selectedFileLabel.text = "파일 읽기 실패: $displayName"
-            statusLabel.text = error.message ?: "$displayName 파일을 읽지 못했습니다."
-            updateButtons()
+            bibleTextView.text = error.message ?: "파일을 읽지 못했습니다."
         }
+    }
+
+    private fun updateCurrentChapterDisplay() {
+        val chapter = chapters.getOrNull(currentChapterIndex)
+        if (chapter != null) {
+            currentPositionTextView.text = "${chapter.book} ${chapter.number}장"
+            bibleTextView.text = chapter.text
+        } else {
+            bibleTextView.text = "선택된 본문이 없습니다."
+            currentPositionTextView.text = "준비됨"
+        }
+    }
+
+    private fun startSmoothAutoScrollForCurrentChapter() {
+        val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
+        val autoScroll = prefs.getBoolean("auto_scroll_enabled", true)
+        if (!autoScroll) return
+
+        stopSmoothAutoScroll()
+
+        bibleScrollView.post {
+            val totalHeight = bibleTextView.height
+            val visibleHeight = bibleScrollView.height
+            val maxScroll = (totalHeight - visibleHeight).coerceAtLeast(0)
+            if (maxScroll <= 0) return@post
+
+            val chapter = chapters.getOrNull(currentChapterIndex) ?: return@post
+
+            // Speed multiplier: 0.5x (slow) to 2.5x (fast), default 1.0x
+            val speedMultiplier = prefs.getFloat("scroll_speed_multiplier", 1.0f).coerceIn(0.2f, 5.0f)
+            val baseDurationMs = (chapter.spokenText.length * 100L).coerceIn(3000L, 300000L)
+            val estimatedDurationMs = (baseDurationMs / speedMultiplier).toLong().coerceIn(2000L, 300000L)
+
+            val startScroll = bibleScrollView.scrollY
+            scrollAnimator = ValueAnimator.ofInt(startScroll, maxScroll).apply {
+                duration = estimatedDurationMs
+                interpolator = LinearInterpolator()
+                addUpdateListener { animator ->
+                    val valY = animator.animatedValue as Int
+                    bibleScrollView.scrollTo(0, valY)
+                }
+                start()
+            }
+        }
+    }
+
+    private fun stopSmoothAutoScroll() {
+        scrollAnimator?.cancel()
+        scrollAnimator = null
     }
 
     override fun onInit(status: Int) {
         if (status != TextToSpeech.SUCCESS) {
-            statusLabel.text = "휴대폰의 음성 엔진을 시작하지 못했습니다."
+            bibleTextView.text = "음성 엔진을 시작하지 못했습니다."
             return
         }
 
@@ -201,75 +164,26 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         if (languageStatus == TextToSpeech.LANG_MISSING_DATA ||
             languageStatus == TextToSpeech.LANG_NOT_SUPPORTED
         ) {
-            statusLabel.text = "한국어 음성 데이터가 없습니다. Android 설정에서 한국어 TTS 음성을 설치해 주세요."
+            bibleTextView.text = "한국어 음성 데이터가 없습니다."
             return
         }
 
         isTtsReady = true
-        setupVoiceSpinner()
-        statusLabel.text = "한국어 음성 준비됨. 목소리를 선택하고 재생하세요."
-        updateButtons()
+        setupVoiceFromPrefs()
+    }
 
-        textToSpeech.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                if (!isPlaying) return
-                val parts = utteranceId?.split("-") ?: return
-                val chapIdx = when {
-                    utteranceId.startsWith("chapter-done-") -> utteranceId.substringAfter("chapter-done-").toIntOrNull()
-                    utteranceId.startsWith("chapter-line-") -> parts.getOrNull(2)?.toIntOrNull()
-                    else -> null
-                }
-                if (chapIdx != null && chapIdx != currentChapterIndex) {
-                    currentChapterIndex = chapIdx
-                }
-                runOnUiThread {
-                    val chapter = chapters.getOrNull(currentChapterIndex)
-                    if (isPlaying && chapter != null) {
-                        statusLabel.text =
-                            "재생 중 ${currentChapterIndex + 1}/${chapters.size}: ${chapter.book} ${chapter.number}장"
-                    }
+    private fun setupVoiceFromPrefs() {
+        try {
+            koreanVoices = textToSpeech.voices?.filter { it.locale.language == "ko" } ?: emptyList()
+            if (koreanVoices.isNotEmpty()) {
+                val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
+                val voiceIndex = prefs.getInt("voice_index", 0).coerceIn(0, koreanVoices.size - 1)
+                koreanVoices.getOrNull(voiceIndex)?.let {
+                    textToSpeech.voice = it
                 }
             }
-
-            override fun onDone(utteranceId: String?) {
-                if (!isPlaying) return
-                if (utteranceId?.startsWith("chapter-done-") == true) {
-                    val finishedChapIdx = utteranceId.substringAfter("chapter-done-").toIntOrNull()
-                    if (finishedChapIdx == currentChapterIndex) {
-                        runOnUiThread {
-                            if (!isPlaying) return@runOnUiThread
-                            currentChapterIndex++
-                            if (currentChapterIndex < chapters.size) {
-                                playCurrentChapter()
-                            } else {
-                                isPlaying = false
-                                isPaused = false
-                                currentChapterIndex = 0
-                                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                                statusLabel.text = "성경 읽기가 완료되었습니다."
-                                updateButtons()
-                            }
-                        }
-                    }
-                }
-            }
-
-            @Suppress("DEPRECATION")
-            override fun onError(utteranceId: String?) {
-                if (isPlaying) {
-                    runOnUiThread {
-                        if (isPlaying) {
-                            isPlaying = false
-                            isPaused = false
-                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                            textToSpeech.stop()
-                            statusLabel.text = "한국어 음성을 재생하지 못했습니다."
-                            updateButtons()
-                        }
-                    }
-                }
-            }
-        })
+        } catch (_: Exception) {
+        }
     }
 
     private fun selectTextFile() {
@@ -280,28 +194,33 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         startActivityForResult(intent, REQUEST_OPEN_TEXT)
     }
 
-    @Deprecated("Uses the system document picker for broad Android compatibility.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_OPEN_TEXT || resultCode != RESULT_OK) return
-        val uri = data?.data ?: return
-        try {
-            val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                ?: error("선택한 파일을 읽을 수 없습니다.")
-            val text = decodeText(bytes)
-            stopPlayback()
-            chapters = BibleTextParser.parse(text)
-            currentChapterIndex = 0
-            val rawName = uri.lastPathSegment ?: "선택한 파일"
-            selectedFileLabel.text = rawName.removeSuffix(".txt")
-            statusLabel.text = "파일을 읽었습니다. 재생 버튼을 누르세요."
-            updateButtons()
-        } catch (error: Exception) {
-            chapters = emptyList()
-            currentChapterIndex = 0
-            selectedFileLabel.text = "선택된 파일 없음"
-            statusLabel.text = error.message ?: "텍스트 파일을 읽지 못했습니다."
-            updateButtons()
+        if (resultCode != RESULT_OK) return
+        if (requestCode == REQUEST_SETTINGS) {
+            loadInitialAsset()
+            setupVoiceFromPrefs()
+            if (isPlaying) {
+                startSmoothAutoScrollForCurrentChapter()
+            }
+            return
+        }
+        if (requestCode == REQUEST_OPEN_TEXT) {
+            val uri = data?.data ?: return
+            try {
+                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: error("파일을 읽을 수 없습니다.")
+                val text = decodeText(bytes)
+                stopPlayback()
+                chapters = BibleTextParser.parse(text)
+                currentChapterIndex = 0
+                val rawName = uri.lastPathSegment ?: "선택한 파일"
+                bibleTitleTextView.text = rawName.removeSuffix(".txt")
+                updateCurrentChapterDisplay()
+            } catch (error: Exception) {
+                chapters = emptyList()
+                bibleTextView.text = error.message ?: "텍스트 파일을 읽지 못했습니다."
+            }
         }
     }
 
@@ -330,31 +249,39 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun playOrResume() {
+    private fun playOrPauseToggle() {
         if (!isTtsReady || chapters.isEmpty()) return
-        if (isPaused) {
+        if (isPlaying) {
+            textToSpeech.stop()
+            isPlaying = false
+            isPaused = true
+            stopSmoothAutoScroll()
+            playPauseToggleButton.setImageResource(R.drawable.ic_play)
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else if (isPaused) {
             isPaused = false
             isPlaying = true
+            playPauseToggleButton.setImageResource(R.drawable.ic_pause)
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             playCurrentChapter()
-            statusLabel.text = "재생 중"
-            updateButtons()
-            return
+        } else {
+            isPlaying = true
+            isPaused = false
+            if (currentChapterIndex >= chapters.size) currentChapterIndex = 0
+            playPauseToggleButton.setImageResource(R.drawable.ic_pause)
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            playCurrentChapter()
         }
-        if (isPlaying) return
-
-        isPlaying = true
-        isPaused = false
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        if (currentChapterIndex >= chapters.size) currentChapterIndex = 0
-        playCurrentChapter()
-        updateButtons()
     }
 
     private fun playCurrentChapter() {
         if (!isPlaying || currentChapterIndex >= chapters.size) return
         val chapter = chapters[currentChapterIndex]
-        val lines = chapter.text.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+        updateCurrentChapterDisplay()
+        bibleScrollView.scrollTo(0, 0)
+        startSmoothAutoScrollForCurrentChapter()
+
+        val lines = chapter.spokenText.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.isEmpty()) {
             currentChapterIndex++
             playCurrentChapter()
@@ -370,25 +297,69 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 "chapter-line-$currentChapterIndex-$lineIndex"
             }
 
-            textToSpeech.speak(
-                line,
-                queueMode,
-                null,
-                utteranceId
-            )
+            textToSpeech.speak(line, queueMode, null, utteranceId)
         }
-    }
 
-    private fun pausePlayback() {
-        if (!isPlaying) return
-        textToSpeech.stop()
-        isPlaying = false
-        isPaused = true
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        val chapter = chapters.getOrNull(currentChapterIndex)
-        val chapterDesc = if (chapter != null) "${chapter.book} ${chapter.number}장" else "${currentChapterIndex + 1}번째"
-        statusLabel.text = "일시정지 ($chapterDesc 위치)"
-        updateButtons()
+        textToSpeech.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
+                if (!isPlaying) return
+                val parts = utteranceId?.split("-") ?: return
+                val chapIdx = when {
+                    utteranceId.startsWith("chapter-done-") -> utteranceId.substringAfter("chapter-done-").toIntOrNull()
+                    utteranceId.startsWith("chapter-line-") -> parts.getOrNull(2)?.toIntOrNull()
+                    else -> null
+                }
+
+                if (chapIdx != null && chapIdx != currentChapterIndex) {
+                    currentChapterIndex = chapIdx
+                    runOnUiThread {
+                        updateCurrentChapterDisplay()
+                        bibleScrollView.scrollTo(0, 0)
+                        startSmoothAutoScrollForCurrentChapter()
+                    }
+                }
+            }
+
+            override fun onDone(utteranceId: String?) {
+                if (!isPlaying) return
+                if (utteranceId?.startsWith("chapter-done-") == true) {
+                    val finishedChapIdx = utteranceId.substringAfter("chapter-done-").toIntOrNull()
+                    if (finishedChapIdx == currentChapterIndex) {
+                        runOnUiThread {
+                            if (!isPlaying) return@runOnUiThread
+                            currentChapterIndex++
+                            if (currentChapterIndex < chapters.size) {
+                                playCurrentChapter()
+                            } else {
+                                isPlaying = false
+                                isPaused = false
+                                currentChapterIndex = 0
+                                stopSmoothAutoScroll()
+                                playPauseToggleButton.setImageResource(R.drawable.ic_play)
+                                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                                currentPositionTextView.text = "읽기 완료"
+                            }
+                        }
+                    }
+                }
+            }
+
+            @Suppress("DEPRECATION")
+            override fun onError(utteranceId: String?) {
+                if (isPlaying) {
+                    runOnUiThread {
+                        if (isPlaying) {
+                            isPlaying = false
+                            isPaused = false
+                            stopSmoothAutoScroll()
+                            playPauseToggleButton.setImageResource(R.drawable.ic_play)
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                            textToSpeech.stop()
+                        }
+                    }
+                }
+            }
+        })
     }
 
     private fun stopPlayback() {
@@ -396,33 +367,27 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         isPaused = false
         currentChapterIndex = 0
         textToSpeech.stop()
+        stopSmoothAutoScroll()
+        playPauseToggleButton.setImageResource(R.drawable.ic_play)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        statusLabel.text = "정지됨 (처음으로 초기화됨)"
-        updateButtons()
-    }
-
-    private fun updateButtons() {
-        assetSpinner.isEnabled = !isPlaying && !isPaused
-        voiceSpinner.isEnabled = !isPlaying && !isPaused
-        loadAssetButton.isEnabled = !isPlaying && !isPaused && assetFiles.isNotEmpty()
-        selectFileButton.isEnabled = !isPlaying && !isPaused
-        playButton.isEnabled = isTtsReady && chapters.isNotEmpty() && (!isPlaying || isPaused)
-        pauseButton.isEnabled = isPlaying
-        stopButton.isEnabled = isPlaying || isPaused
+        updateCurrentChapterDisplay()
+        bibleScrollView.scrollTo(0, 0)
     }
 
     override fun onDestroy() {
         isPlaying = false
         isPaused = false
+        stopSmoothAutoScroll()
         if (::textToSpeech.isInitialized) {
             textToSpeech.stop()
             textToSpeech.shutdown()
         }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         super.onDestroy()
-    }
+            }
 
     companion object {
         private const val REQUEST_OPEN_TEXT = 1001
+        private const val REQUEST_SETTINGS = 1002
     }
 }
