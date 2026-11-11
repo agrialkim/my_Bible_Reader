@@ -4,11 +4,12 @@ data class BibleChapter(
     val book: String,
     val number: Int,
     val text: String,
-    val spokenText: String
+    val spokenText: String,
+    val verseLineIndices: Map<Int, Int> = emptyMap()
 )
 
 object BibleTextParser {
-    private val bookNames = mapOf(
+    val bookNames = mapOf(
         "창" to "창세기", "출" to "출애굽기", "레" to "레위기", "민" to "민수기",
         "신" to "신명기", "수" to "여호수아", "삿" to "사사기", "룻" to "룻기",
         "삼상" to "사무엘상", "삼하" to "사무엘하", "왕상" to "열왕기상",
@@ -44,6 +45,8 @@ object BibleTextParser {
         var spokenTextLines = mutableListOf<String>()
         val leadingDisplayLines = mutableListOf<String>()
         val leadingSpokenLines = mutableListOf<String>()
+        val verseLineIndices = mutableMapOf<Int, Int>()
+        val leadingVerseLineIndices = mutableMapOf<Int, Int>()
 
         for (line in source.lineSequence()) {
             val match = versePrefix.find(line)
@@ -76,7 +79,8 @@ object BibleTextParser {
                             bookNames[currentBook] ?: currentBook,
                             currentNumber,
                             displayTextLines.joinToString("\n"),
-                            spokenTextLines.joinToString("\n")
+                            spokenTextLines.joinToString("\n"),
+                            verseLineIndices.toMap()
                         )
                     )
                 }
@@ -87,6 +91,10 @@ object BibleTextParser {
                 spokenTextLines = leadingSpokenLines.toMutableList()
                 leadingDisplayLines.clear()
                 leadingSpokenLines.clear()
+                
+                verseLineIndices.clear()
+                verseLineIndices.putAll(leadingVerseLineIndices)
+                leadingVerseLineIndices.clear()
 
                 val bookName = bookNames[abbreviation] ?: abbreviation
                 displayTextLines.add("$bookName ${chapter}장")
@@ -102,6 +110,16 @@ object BibleTextParser {
             if (rawVerse.isNotEmpty()) {
                 val verseDisplay = if (verseNumDisplay.isNotEmpty()) "$verseNumDisplay $rawVerse" else rawVerse
                 displayTextLines.add(verseDisplay)
+                
+                val verseInt = startVerse.toIntOrNull()
+                if (verseInt != null) {
+                    if (currentBook == null) {
+                        leadingVerseLineIndices[verseInt] = leadingSpokenLines.size
+                    } else {
+                        verseLineIndices[verseInt] = spokenTextLines.size
+                    }
+                }
+                
                 spokenTextLines.add(formatReferences(rawVerse))
             }
         }
@@ -112,7 +130,8 @@ object BibleTextParser {
                     bookNames[currentBook] ?: currentBook,
                     currentNumber,
                     displayTextLines.joinToString("\n"),
-                    spokenTextLines.joinToString("\n")
+                    spokenTextLines.joinToString("\n"),
+                    verseLineIndices.toMap()
                 )
             )
         }
