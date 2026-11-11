@@ -42,6 +42,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var currentLineIndex = 0
     private var pausedScrollY = 0
     private var scrollAnimator: ValueAnimator? = null
+    private var highlightedLineIndex: Int? = null
+    private var forceDelayOnce: Long = 0L
 
     data class BibleFile(val name: String, val isAsset: Boolean, val file: java.io.File? = null)
 
@@ -152,8 +154,27 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val chapter = chapters.getOrNull(currentChapterIndex)
         if (chapter != null) {
             currentPositionTextView.text = "${chapter.book} ${chapter.number}장"
-            // \u200B (Zero-Width Space)를 매 글자 사이에 삽입하여 글자 단위 줄바꿈(word-break: break-all) 강제
-            bibleTextView.text = chapter.text.toCharArray().joinToString("\u200B")
+            
+            val lines = chapter.text.split("\n")
+            val spannable = android.text.SpannableStringBuilder()
+            
+            for ((index, line) in lines.withIndex()) {
+                val spacedLine = line.toCharArray().joinToString("\u200B")
+                val start = spannable.length
+                spannable.append(spacedLine)
+                if (index == highlightedLineIndex) {
+                    spannable.setSpan(
+                        android.text.style.BackgroundColorSpan(android.graphics.Color.parseColor("#FFD1DC")), 
+                        start,
+                        spannable.length,
+                        android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                }
+                if (index < lines.size - 1) {
+                    spannable.append("\n")
+                }
+            }
+            bibleTextView.text = spannable
         } else {
             bibleTextView.text = "선택된 본문이 없습니다."
             currentPositionTextView.text = "준비됨"
@@ -190,9 +211,13 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 scrollAnimator = ValueAnimator.ofInt(startScroll, maxScroll).apply {
                     duration = remainingDurationMs
                     interpolator = LinearInterpolator()
-                    // 새 장 시작 시(처음부터 읽을 때) 7.5초 대기 후 스크롤 시작
-                    if (!resuming) {
-                        startDelay = 7500L
+                    
+                    if (forceDelayOnce > 0L) {
+                        startDelay = forceDelayOnce
+                        forceDelayOnce = 0L
+                    } else if (!resuming) {
+                        // 새 장 시작 시(처음부터 읽을 때) 20초 대기 후 스크롤 시작
+                        startDelay = 20000L
                     }
                     addUpdateListener { animator ->
                         val valY = animator.animatedValue as Int
@@ -246,16 +271,129 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             Toast.makeText(this, "먼저 성경 텍스트 파일을 열어주세요.", Toast.LENGTH_SHORT).show()
             return
         }
-        val input = EditText(this).apply {
-            hint = "예: 창 1:5, 창세기 1장 5절"
-            setPadding(48, 32, 48, 32)
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_search, null)
+        val searchEditText = dialogView.findViewById<EditText>(R.id.searchEditText)
+        val bookSpinner = dialogView.findViewById<android.widget.Spinner>(R.id.bookSpinner)
+        val chapterSpinner = dialogView.findViewById<android.widget.Spinner>(R.id.chapterSpinner)
+        val verseSpinner = dialogView.findViewById<android.widget.Spinner>(R.id.verseSpinner)
+        val otCategoryButton = dialogView.findViewById<android.widget.Button>(R.id.otCategoryButton)
+        val ntCategoryButton = dialogView.findViewById<android.widget.Button>(R.id.ntCategoryButton)
+
+        val uniqueBooks = chapters.map { it.book }.distinct()
+        val bookAdapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_item, uniqueBooks)
+        bookAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        bookSpinner.adapter = bookAdapter
+
+        val otCategories = arrayOf("모세오경", "역사서 (구약)", "시가서", "대선지서", "소선지서")
+        val ntCategories = arrayOf("복음서", "역사서 (신약)", "서신서", "예언서 (계시록)")
+        
+        val categoryMap = mapOf(
+            "모세오경" to listOf("창세기", "출애굽기", "레위기", "민수기", "신명기"),
+            "역사서 (구약)" to listOf("여호수아", "사사기", "룻기", "사무엘상", "사무엘하", "열왕기상", "열왕기하", "역대상", "역대하", "에스라", "느헤미야", "에스더"),
+            "시가서" to listOf("욥기", "시편", "잠언", "전도서", "아가"),
+            "대선지서" to listOf("이사야", "예레미야", "예레미야애가", "에스겔", "다니엘"),
+            "소선지서" to listOf("호세아", "요엘", "아모스", "오바댜", "요나", "미가", "나훔", "하박국", "스바냐", "학개", "스가랴", "말라기"),
+            "복음서" to listOf("마태복음", "마가복음", "누가복음", "요한복음"),
+            "역사서 (신약)" to listOf("사도행전"),
+            "서신서" to listOf("로마서", "고린도전서", "고린도후서", "갈라디아서", "에베소서", "빌립보서", "골로새서", "데살로니가전서", "데살로니가후서", "디모데전서", "디모데후서", "디도서", "빌레몬서", "히브리서", "야고보서", "베드로전서", "베드로후서", "요한일서", "요한이서", "요한삼서", "유다서"),
+            "예언서 (계시록)" to listOf("요한계시록")
+        )
+
+        fun selectFirstAvailableBook(category: String) {
+            val booksInCategory = categoryMap[category] ?: return
+            val firstAvailable = booksInCategory.firstOrNull { uniqueBooks.contains(it) }
+            if (firstAvailable != null) {
+                val index = uniqueBooks.indexOf(firstAvailable)
+                bookSpinner.setSelection(index)
+            } else {
+                Toast.makeText(this@MainActivity, "해당 분류의 성경이 포함되어 있지 않습니다.", Toast.LENGTH_SHORT).show()
+            }
         }
+
+        otCategoryButton.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("구약 분류 선택")
+                .setItems(otCategories) { _, which ->
+                    selectFirstAvailableBook(otCategories[which])
+                }
+                .show()
+        }
+
+        ntCategoryButton.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("신약 분류 선택")
+                .setItems(ntCategories) { _, which ->
+                    selectFirstAvailableBook(ntCategories[which])
+                }
+                .show()
+        }
+
+        fun syncEditText() {
+            val book = bookSpinner.selectedItem as? String ?: return
+            val chap = (chapterSpinner.selectedItem as? String)?.replace("장", "") ?: "1"
+            val verse = (verseSpinner.selectedItem as? String)?.replace("절", "") ?: "1"
+            searchEditText.setText("$book $chap:$verse")
+            searchEditText.setSelection(searchEditText.text.length)
+        }
+
+        bookSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                val selectedBook = uniqueBooks[position]
+                val bookChapters = chapters.filter { it.book == selectedBook }
+                val chapterNumbers = bookChapters.map { "${it.number}장" }
+                
+                val chapterAdapter = android.widget.ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, chapterNumbers)
+                chapterAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                chapterSpinner.adapter = chapterAdapter
+
+                chapterSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, chapterPos: Int, id: Long) {
+                        val selectedChapter = bookChapters[chapterPos]
+                        val verses = selectedChapter.verseLineIndices.keys.sorted().map { "${it}절" }
+                        val verseAdapter = android.widget.ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, if (verses.isEmpty()) listOf("1절") else verses)
+                        verseAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                        verseSpinner.adapter = verseAdapter
+                        
+                        verseSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                            override fun onItemSelected(p0: android.widget.AdapterView<*>?, p1: android.view.View?, p2: Int, p3: Long) {
+                                syncEditText()
+                            }
+                            override fun onNothingSelected(p0: android.widget.AdapterView<*>?) {}
+                        }
+                    }
+                    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+                }
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        }
+
+        val currentChapter = chapters.getOrNull(currentChapterIndex)
+        if (currentChapter != null) {
+            val bookIndex = uniqueBooks.indexOf(currentChapter.book)
+            if (bookIndex >= 0) {
+                bookSpinner.setSelection(bookIndex)
+            }
+        }
+
         AlertDialog.Builder(this)
             .setTitle("성경 구절 검색")
-            .setView(input)
+            .setView(dialogView)
             .setPositiveButton("이동") { _, _ ->
-                val query = input.text.toString().trim()
-                jumpToQuery(query)
+                val query = searchEditText.text.toString().trim()
+                if (query.isNotEmpty()) {
+                    jumpToQuery(query)
+                } else {
+                    val book = bookSpinner.selectedItem as? String ?: return@setPositiveButton
+                    val chapStr = chapterSpinner.selectedItem as? String ?: return@setPositiveButton
+                    val verseStr = verseSpinner.selectedItem as? String ?: return@setPositiveButton
+                    
+                    val chapterNum = chapStr.replace("장", "").toIntOrNull() ?: 1
+                    val verseNum = verseStr.replace("절", "").toIntOrNull() ?: 1
+                    
+                    val chapIdx = chapters.indexOfFirst { it.book == book && it.number == chapterNum }
+                    jumpToLocation(chapIdx, verseNum)
+                }
             }
             .setNegativeButton("취소", null)
             .show()
@@ -273,8 +411,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val verseQuery = match.groupValues.getOrNull(3)?.toIntOrNull()
 
         val fullBookName = BibleTextParser.bookNames[bookQuery] ?: bookQuery
-
         val chapIdx = chapters.indexOfFirst { it.book == fullBookName && it.number == chapterQuery }
+        jumpToLocation(chapIdx, verseQuery)
+    }
+
+    private fun jumpToLocation(chapIdx: Int, verseNum: Int?) {
         if (chapIdx == -1) {
             Toast.makeText(this, "해당 장을 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
             return
@@ -284,36 +425,48 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         currentChapterIndex = chapIdx
         
         val chapter = chapters[chapIdx]
-        currentLineIndex = if (verseQuery != null && chapter.verseLineIndices.containsKey(verseQuery)) {
-            chapter.verseLineIndices[verseQuery]!!
+        currentLineIndex = if (verseNum != null && chapter.verseLineIndices.containsKey(verseNum)) {
+            chapter.verseLineIndices[verseNum]!!
         } else {
             0
         }
         
         runOnUiThread {
+            highlightedLineIndex = currentLineIndex
             updateCurrentChapterDisplay()
             bibleScrollView.post {
-                val lines = chapter.spokenText.split("\n")
-                val maxLines = lines.size
-                
-                val childHeight = bibleScrollView.getChildAt(0)?.height ?: 0
-                val totalContentHeight = childHeight + bibleScrollView.paddingTop + bibleScrollView.paddingBottom
-                val visibleHeight = bibleScrollView.height
-                val maxScroll = (totalContentHeight - visibleHeight).coerceAtLeast(0)
-                
-                if (maxScroll > 0 && maxLines > 0) {
-                    pausedScrollY = (maxScroll * (currentLineIndex.toFloat() / maxLines)).toInt()
+                val layout = bibleTextView.layout
+                if (layout != null) {
+                    val originalLines = chapter.text.split("\n")
+                    var originalOffset = 0
+                    for (i in 0 until currentLineIndex.coerceAtMost(originalLines.size)) {
+                        originalOffset += originalLines[i].length + 1
+                    }
+                    val modifiedOffset = originalOffset * 2
+                    
+                    val layoutLine = layout.getLineForOffset(modifiedOffset.coerceAtMost(bibleTextView.text.length))
+                    val y = layout.getLineTop(layoutLine)
+                    
+                    val childHeight = bibleScrollView.getChildAt(0)?.height ?: 0
+                    val totalContentHeight = childHeight + bibleScrollView.paddingTop + bibleScrollView.paddingBottom
+                    val maxScroll = (totalContentHeight - bibleScrollView.height).coerceAtLeast(0)
+                    
+                    // 시작 위치를 약간 아래로 하여 윗부분이 가려지지 않게 함 (100px 여백 추가)
+                    pausedScrollY = (y + bibleTextView.top - 100).coerceIn(0, maxScroll)
                     bibleScrollView.scrollTo(0, pausedScrollY)
                 } else {
                     pausedScrollY = 0
                     bibleScrollView.scrollTo(0, 0)
                 }
                 
-                isPaused = false
-                isPlaying = true
-                playPauseToggleButton.setImageResource(R.drawable.ic_pause)
-                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                playCurrentChapter(resuming = true)
+                forceDelayOnce = 20000L // 검색이나 특정 위치로 이동 후 재생 시 20초 대기
+
+                isPaused = true
+                isPlaying = false
+                playPauseToggleButton.setImageResource(R.drawable.ic_play)
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                stopSmoothAutoScroll()
+                textToSpeech.stop()
             }
         }
     }
@@ -356,6 +509,30 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun syncLineWithScrollPosition() {
+        val chapter = chapters.getOrNull(currentChapterIndex) ?: return
+        val layout = bibleTextView.layout ?: return
+        
+        // 윗부분이 가려지지 않게 100px 여백을 두었으므로, 보정치 + 120을 더해 실제 눈에 보이는 줄을 찾음
+        val scrollY = (bibleScrollView.scrollY + 120 - bibleTextView.top).coerceAtLeast(0)
+        val layoutLine = layout.getLineForVertical(scrollY)
+        val modifiedOffset = layout.getLineStart(layoutLine)
+        
+        // Zero-Width Space가 삽입되어 있으므로 텍스트 인덱스를 2로 나눔
+        val originalOffset = modifiedOffset / 2
+        
+        val originalText = chapter.text
+        var lineCount = 0
+        for (i in 0 until originalOffset.coerceAtMost(originalText.length)) {
+            if (originalText[i] == '\n') {
+                lineCount++
+            }
+        }
+        
+        currentLineIndex = lineCount.coerceIn(0, chapter.spokenText.split("\n").size - 1)
+        pausedScrollY = bibleScrollView.scrollY
+    }
+
     private fun playOrPauseToggle() {
         if (!isTtsReady || chapters.isEmpty()) return
         if (isPlaying) {
@@ -366,26 +543,30 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             stopSmoothAutoScroll()
             playPauseToggleButton.setImageResource(R.drawable.ic_play)
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        } else if (isPaused) {
-            isPaused = false
-            isPlaying = true
-            playPauseToggleButton.setImageResource(R.drawable.ic_pause)
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            playCurrentChapter(resuming = true)
         } else {
-            isPlaying = true
+            // 사용자가 수동으로 스크롤을 움직인 경우에만 동기화 수행
+            if (kotlin.math.abs(bibleScrollView.scrollY - pausedScrollY) > 5) {
+                syncLineWithScrollPosition()
+                forceDelayOnce = 5000L // 수동 스크롤 조작 후 재생 시 5초 대기
+            }
+            
             isPaused = false
-            currentChapterIndex = 0
-            currentLineIndex = 0
-            pausedScrollY = 0
+            isPlaying = true
             playPauseToggleButton.setImageResource(R.drawable.ic_pause)
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            playCurrentChapter(resuming = false)
+            
+            val isFromStart = currentLineIndex == 0
+            if (isFromStart && forceDelayOnce == 0L) {
+                forceDelayOnce = 20000L
+            }
+            
+            playCurrentChapter(resuming = !isFromStart)
         }
     }
 
     private fun playCurrentChapter(resuming: Boolean = false) {
         if (!isPlaying || currentChapterIndex >= chapters.size) return
+        highlightedLineIndex = null
         val chapter = chapters[currentChapterIndex]
         updateCurrentChapterDisplay()
 
