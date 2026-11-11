@@ -91,45 +91,6 @@
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
-            <!-- 스크롤링 속도 조절 가로 바 (SeekBar) -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:text="스크롤링 속도 조절"
-                android:textColor="#0F172A"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="#FFFFFF"
-                android:elevation="1dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:padding="12dp">
-
-                <SeekBar
-                    android:id="@+id/speedSeekBar"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:max="250"
-                    android:progress="120" />
-
-                <TextView
-                    android:id="@+id/speedValueTextView"
-                    android:layout_width="64dp"
-                    android:layout_height="wrap_content"
-                    android:gravity="end"
-                    android:text="120ms"
-                    android:textColor="#334155"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
             <Button
                 android:id="@+id/saveOptionsButton"
                 android:layout_width="match_parent"

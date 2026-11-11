@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <!-- 테마 선택 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="화면 모드"
+        android:textStyle="bold"
+        android:textColor="#0F172A"
+        android:textSize="16sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+
+        <Button
+            android:id="@+id/themeNormalBtn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            style="?android:attr/buttonBarButtonStyle"
+            android:background="#E2E8F0"
+            android:text="일반" />
+
+        <Button
+            android:id="@+id/themeDarkBtn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginHorizontal="2dp"
+            style="?android:attr/buttonBarButtonStyle"
+            android:background="#E2E8F0"
+            android:text="다크" />
+
+        <Button
+            android:id="@+id/themeBlueBtn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            style="?android:attr/buttonBarButtonStyle"
+            android:background="#E2E8F0"
+            android:text="블루라이트" />
+    </LinearLayout>
+
+    <!-- 스크롤 속도 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:text="스크롤 속도"
+        android:textStyle="bold"
+        android:textColor="#0F172A"
+        android:textSize="16sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="8dp">
+        <SeekBar
+            android:id="@+id/displaySpeedSeekBar"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+        <TextView
+            android:id="@+id/displaySpeedValue"
+            android:layout_width="50dp"
+            android:layout_height="wrap_content"
+            android:gravity="end"
+            android:text="1.0배"
+            android:textColor="#334155"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- 시작 지연 시간 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:text="시작 지연 시간"
+        android:textStyle="bold"
+        android:textColor="#0F172A"
+        android:textSize="16sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="8dp">
+        <SeekBar
+            android:id="@+id/delaySeekBar"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:max="4" />
+        <TextView
+            android:id="@+id/delayValue"
+            android:layout_width="50dp"
+            android:layout_height="wrap_content"
+            android:gravity="end"
+            android:text="15초"
+            android:textColor="#334155"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- 폰트 크기 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:text="글씨 크기"
+        android:textStyle="bold"
+        android:textColor="#0F172A"
+        android:textSize="16sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="8dp">
+
+        <Button
+            android:id="@+id/fontMinusBtn"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:backgroundTint="#F1F5F9"
+            android:textColor="#0F172A"
+            android:text="-"
+            android:textSize="20sp" />
+
+        <TextView
+            android:id="@+id/fontValueText"
+            android:layout_width="60dp"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="12"
+            android:textColor="#334155"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/fontPlusBtn"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:backgroundTint="#F1F5F9"
+            android:textColor="#0F172A"
+            android:text="+"
+            android:textSize="20sp" />
+    </LinearLayout>
+</LinearLayout>
