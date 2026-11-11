@@ -2,6 +2,7 @@ package com.sciencethink.biblereader
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -10,10 +11,11 @@ import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import java.io.File
 import java.util.Locale
 
 class SettingsActivity : Activity() {
-    private lateinit var settingsAssetSpinner: Spinner
+    private lateinit var importBibleButton: Button
     private lateinit var settingsVoiceSpinner: Spinner
     private lateinit var autoScrollSwitch: Switch
     private lateinit var speedSeekBar: SeekBar
@@ -25,7 +27,7 @@ class SettingsActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
-        settingsAssetSpinner = findViewById(R.id.settingsAssetSpinner)
+        importBibleButton = findViewById(R.id.importBibleButton)
         settingsVoiceSpinner = findViewById(R.id.settingsVoiceSpinner)
         autoScrollSwitch = findViewById(R.id.autoScrollSwitch)
         speedSeekBar = findViewById(R.id.speedSeekBar)
@@ -34,6 +36,14 @@ class SettingsActivity : Activity() {
         backButton = findViewById(R.id.backButton)
 
         backButton.setOnClickListener { finish() }
+
+        importBibleButton.setOnClickListener {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "text/plain"
+            }
+            startActivityForResult(intent, 100)
+        }
 
         setupSpinners()
 
@@ -57,7 +67,6 @@ class SettingsActivity : Activity() {
         saveOptionsButton.setOnClickListener {
             val multiplier = 0.5f + (speedSeekBar.progress * 0.1f)
             val editor = prefs.edit()
-            editor.putInt("asset_index", settingsAssetSpinner.selectedItemPosition)
             editor.putInt("voice_index", settingsVoiceSpinner.selectedItemPosition)
             editor.putBoolean("auto_scroll_enabled", autoScrollSwitch.isChecked)
             editor.putFloat("scroll_speed_multiplier", multiplier)
@@ -69,6 +78,27 @@ class SettingsActivity : Activity() {
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 100 && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            try {
+                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return
+                var fileName = uri.lastPathSegment ?: "imported.txt"
+                if (!fileName.endsWith(".txt")) fileName += ".txt"
+                
+                val importDir = File(filesDir, "imported_bibles")
+                importDir.mkdirs()
+                val targetFile = File(importDir, fileName)
+                targetFile.writeBytes(bytes)
+                
+                Toast.makeText(this, "$fileName 추가 완료! 메인 화면에서 선택하세요.", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "파일 추가 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun updateSpeedLabel(progress: Int) {
         val multiplier = 0.5f + (progress * 0.1f)
         speedValueTextView.text = String.format(Locale.US, "%.1f배", multiplier)
@@ -76,25 +106,7 @@ class SettingsActivity : Activity() {
 
     private fun setupSpinners() {
         try {
-            val rawFiles = (assets.list("") ?: emptyArray()).filter { it.endsWith(".txt") }
-            val preferredOrder = listOf("개역개정.txt")
-            val assetFiles = rawFiles.sortedWith(Comparator { a, b ->
-                val indexA = preferredOrder.indexOf(a)
-                val indexB = preferredOrder.indexOf(b)
-                if (indexA != -1 && indexB != -1) indexA.compareTo(indexB)
-                else if (indexA != -1) -1
-                else if (indexB != -1) 1
-                else a.compareTo(b)
-            })
-
-            val displayNames = assetFiles.map { it.removeSuffix(".txt") }
-            val assetAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, displayNames).apply {
-                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            }
-            settingsAssetSpinner.adapter = assetAdapter
-
             val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
-            settingsAssetSpinner.setSelection(prefs.getInt("asset_index", 0))
 
             val voiceNames = listOf("여성 음성 1", "남성 음성 1", "기본 음성")
             val voiceAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, voiceNames).apply {

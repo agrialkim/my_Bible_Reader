@@ -52,22 +52,15 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <TextView
+            <Button
+                android:id="@+id/importBibleButton"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="기본 성경 종류"
-                android:textColor="#0F172A"
+                android:layout_height="52dp"
+                android:backgroundTint="#475569"
+                android:text="+ 외부 성경 텍스트 추가 가져오기"
+                android:textColor="#FFFFFF"
                 android:textSize="16sp"
                 android:textStyle="bold" />
-
-            <Spinner
-                android:id="@+id/settingsAssetSpinner"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="#FFFFFF"
-                android:minHeight="48dp"
-                android:padding="8dp" />
 
             <TextView
                 android:layout_width="match_parent"

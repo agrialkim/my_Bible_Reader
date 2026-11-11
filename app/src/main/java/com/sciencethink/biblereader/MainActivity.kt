@@ -12,6 +12,10 @@ import android.view.animation.LinearInterpolator
 import android.widget.ImageButton
 import android.widget.ScrollView
 import android.widget.TextView
+import android.app.AlertDialog
+import android.widget.EditText
+import android.widget.Toast
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.Charset
@@ -30,7 +34,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var utilityIconButton: ImageButton
 
     private var chapters: List<BibleChapter> = emptyList()
-    private var assetFiles: List<String> = emptyList()
     private var koreanVoices: List<android.speech.tts.Voice> = emptyList()
     private var isTtsReady = false
     private var isPlaying = false
@@ -39,6 +42,31 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var currentLineIndex = 0
     private var pausedScrollY = 0
     private var scrollAnimator: ValueAnimator? = null
+
+    data class BibleFile(val name: String, val isAsset: Boolean, val file: java.io.File? = null)
+
+    private fun getAvailableBibles(): List<BibleFile> {
+        val list = mutableListOf<BibleFile>()
+        val rawAssets = (assets.list("") ?: emptyArray()).filter { it.endsWith(".txt") }
+        val preferredOrder = listOf("개역개정.txt", "KJV.txt", "새번역.txt")
+        val sortedAssets = rawAssets.sortedWith(Comparator { a, b ->
+            val indexA = preferredOrder.indexOf(a)
+            val indexB = preferredOrder.indexOf(b)
+            if (indexA != -1 && indexB != -1) indexA.compareTo(indexB)
+            else if (indexA != -1) -1
+            else if (indexB != -1) 1
+            else a.compareTo(b)
+        })
+        sortedAssets.forEach { list.add(BibleFile(it, true)) }
+
+        val importedDir = File(filesDir, "imported_bibles")
+        if (importedDir.exists()) {
+            importedDir.listFiles()?.filter { it.name.endsWith(".txt") }?.sortedBy { it.name }?.forEach {
+                list.add(BibleFile(it.name, false, it))
+            }
+        }
+        return list
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,7 +83,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
         loadInitialAsset()
 
-        searchIconButton.setOnClickListener { selectTextFile() }
+        searchIconButton.setOnClickListener { showSearchDialog() }
+        bibleTitleTextView.setOnClickListener { showBibleSelectionDialog() }
         settingsIconButton.setOnClickListener {
             val intent = Intent(this, SettingsActivity::class.java)
             startActivityForResult(intent, REQUEST_SETTINGS)
@@ -68,38 +97,45 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         textToSpeech = TextToSpeech(this, this)
     }
 
-    private fun loadInitialAsset() {
-        try {
-            val rawFiles = (assets.list("") ?: emptyArray()).filter { it.endsWith(".txt") }
-            val preferredOrder = listOf("개역개정.txt", "KJV.txt", "새번역.txt")
-            assetFiles = rawFiles.sortedWith(Comparator { a, b ->
-                val indexA = preferredOrder.indexOf(a)
-                val indexB = preferredOrder.indexOf(b)
-                if (indexA != -1 && indexB != -1) indexA.compareTo(indexB)
-                else if (indexA != -1) -1
-                else if (indexB != -1) 1
-                else a.compareTo(b)
-            })
-
-            val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
-            val savedIndex = prefs.getInt("asset_index", 0).coerceIn(0, (assetFiles.size - 1).coerceAtLeast(0))
-            val fileName = assetFiles.getOrNull(savedIndex) ?: "개역개정.txt"
-
-            loadAssetFile(fileName)
-        } catch (_: Exception) {
-            bibleTextView.text = "성경 본문을 불러오지 못했습니다."
-        }
+    private fun showBibleSelectionDialog() {
+        val bibles = getAvailableBibles()
+        val names = bibles.map { it.name.removeSuffix(".txt") }.toTypedArray()
+        
+        AlertDialog.Builder(this)
+            .setTitle("성경 선택")
+            .setItems(names) { _, which ->
+                val selected = bibles[which]
+                val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
+                prefs.edit().putString("selected_bible_name", selected.name)
+                            .putBoolean("selected_bible_is_asset", selected.isAsset).apply()
+                loadBible(selected)
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
 
-    private fun loadAssetFile(fileName: String) {
+    private fun loadInitialAsset() {
+        val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
+        val savedName = prefs.getString("selected_bible_name", "개역개정.txt") ?: "개역개정.txt"
+        val isAsset = prefs.getBoolean("selected_bible_is_asset", true)
+        
+        val bible = BibleFile(savedName, isAsset, if (!isAsset) File(File(filesDir, "imported_bibles"), savedName) else null)
+        loadBible(bible)
+    }
+
+    private fun loadBible(bible: BibleFile) {
         try {
-            val bytes = assets.open(fileName).use { it.readBytes() }
+            val bytes = if (bible.isAsset) {
+                assets.open(bible.name).use { it.readBytes() }
+            } else {
+                bible.file?.readBytes() ?: throw Exception("파일이 없습니다.")
+            }
             val text = decodeText(bytes)
             chapters = BibleTextParser.parse(text)
             currentChapterIndex = 0
             currentLineIndex = 0
             pausedScrollY = 0
-            val displayName = fileName.removeSuffix(".txt")
+            val displayName = bible.name.removeSuffix(".txt")
             bibleTitleTextView.text = displayName
             updateCurrentChapterDisplay()
         } catch (error: Exception) {
@@ -108,6 +144,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             currentLineIndex = 0
             pausedScrollY = 0
             bibleTextView.text = error.message ?: "파일을 읽지 못했습니다."
+            bibleTitleTextView.text = "오류"
         }
     }
 
@@ -204,12 +241,81 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun selectTextFile() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "text/plain"
+    private fun showSearchDialog() {
+        if (chapters.isEmpty()) {
+            Toast.makeText(this, "먼저 성경 텍스트 파일을 열어주세요.", Toast.LENGTH_SHORT).show()
+            return
         }
-        startActivityForResult(intent, REQUEST_OPEN_TEXT)
+        val input = EditText(this).apply {
+            hint = "예: 창 1:5, 창세기 1장 5절"
+            setPadding(48, 32, 48, 32)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("성경 구절 검색")
+            .setView(input)
+            .setPositiveButton("이동") { _, _ ->
+                val query = input.text.toString().trim()
+                jumpToQuery(query)
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun jumpToQuery(query: String) {
+        val regex = Regex("""([가-힣]{1,8})\s*(\d{1,3})(?:\s*[장:\-\s]\s*(\d{1,3}))?""")
+        val match = regex.find(query)
+        if (match == null) {
+            Toast.makeText(this, "검색어를 인식할 수 없습니다. (예: 창 1:5)", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val bookQuery = match.groupValues[1]
+        val chapterQuery = match.groupValues[2].toIntOrNull() ?: 1
+        val verseQuery = match.groupValues.getOrNull(3)?.toIntOrNull()
+
+        val fullBookName = BibleTextParser.bookNames[bookQuery] ?: bookQuery
+
+        val chapIdx = chapters.indexOfFirst { it.book == fullBookName && it.number == chapterQuery }
+        if (chapIdx == -1) {
+            Toast.makeText(this, "해당 장을 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        stopPlayback()
+        currentChapterIndex = chapIdx
+        
+        val chapter = chapters[chapIdx]
+        currentLineIndex = if (verseQuery != null && chapter.verseLineIndices.containsKey(verseQuery)) {
+            chapter.verseLineIndices[verseQuery]!!
+        } else {
+            0
+        }
+        
+        runOnUiThread {
+            updateCurrentChapterDisplay()
+            bibleScrollView.post {
+                val lines = chapter.spokenText.split("\n")
+                val maxLines = lines.size
+                
+                val childHeight = bibleScrollView.getChildAt(0)?.height ?: 0
+                val totalContentHeight = childHeight + bibleScrollView.paddingTop + bibleScrollView.paddingBottom
+                val visibleHeight = bibleScrollView.height
+                val maxScroll = (totalContentHeight - visibleHeight).coerceAtLeast(0)
+                
+                if (maxScroll > 0 && maxLines > 0) {
+                    pausedScrollY = (maxScroll * (currentLineIndex.toFloat() / maxLines)).toInt()
+                    bibleScrollView.scrollTo(0, pausedScrollY)
+                } else {
+                    pausedScrollY = 0
+                    bibleScrollView.scrollTo(0, 0)
+                }
+                
+                isPaused = false
+                isPlaying = true
+                playPauseToggleButton.setImageResource(R.drawable.ic_pause)
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                playCurrentChapter(resuming = true)
+            }
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -222,28 +328,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 startSmoothAutoScrollForCurrentChapter(true)
             }
             return
-        }
-        if (requestCode == REQUEST_OPEN_TEXT) {
-            val uri = data?.data ?: return
-            try {
-                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: error("파일을 읽을 수 없습니다.")
-                val text = decodeText(bytes)
-                stopPlayback()
-                chapters = BibleTextParser.parse(text)
-                currentChapterIndex = 0
-                currentLineIndex = 0
-                pausedScrollY = 0
-                val rawName = uri.lastPathSegment ?: "선택한 파일"
-                bibleTitleTextView.text = rawName.removeSuffix(".txt")
-                updateCurrentChapterDisplay()
-            } catch (error: Exception) {
-                chapters = emptyList()
-                currentChapterIndex = 0
-                currentLineIndex = 0
-                pausedScrollY = 0
-                bibleTextView.text = error.message ?: "텍스트 파일을 읽지 못했습니다."
-            }
         }
     }
 
@@ -437,7 +521,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     companion object {
-        private const val REQUEST_OPEN_TEXT = 1001
         private const val REQUEST_SETTINGS = 1002
     }
 }
