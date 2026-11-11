@@ -36,6 +36,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var isPlaying = false
     private var isPaused = false
     private var currentChapterIndex = 0
+    private var currentLineIndex = 0
+    private var pausedScrollY = 0
     private var scrollAnimator: ValueAnimator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -95,12 +97,16 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             val text = decodeText(bytes)
             chapters = BibleTextParser.parse(text)
             currentChapterIndex = 0
+            currentLineIndex = 0
+            pausedScrollY = 0
             val displayName = fileName.removeSuffix(".txt")
             bibleTitleTextView.text = displayName
             updateCurrentChapterDisplay()
         } catch (error: Exception) {
             chapters = emptyList()
             currentChapterIndex = 0
+            currentLineIndex = 0
+            pausedScrollY = 0
             bibleTextView.text = error.message ?: "파일을 읽지 못했습니다."
         }
     }
@@ -109,44 +115,56 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val chapter = chapters.getOrNull(currentChapterIndex)
         if (chapter != null) {
             currentPositionTextView.text = "${chapter.book} ${chapter.number}장"
-            bibleTextView.text = chapter.text
+            // \u200B (Zero-Width Space)를 매 글자 사이에 삽입하여 글자 단위 줄바꿈(word-break: break-all) 강제
+            bibleTextView.text = chapter.text.toCharArray().joinToString("\u200B")
         } else {
             bibleTextView.text = "선택된 본문이 없습니다."
             currentPositionTextView.text = "준비됨"
         }
     }
 
-    private fun startSmoothAutoScrollForCurrentChapter() {
+    private fun startSmoothAutoScrollForCurrentChapter(resuming: Boolean) {
         val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
         val autoScroll = prefs.getBoolean("auto_scroll_enabled", true)
         if (!autoScroll) return
 
         stopSmoothAutoScroll()
 
-        bibleScrollView.post {
-            val totalHeight = bibleTextView.height
-            val visibleHeight = bibleScrollView.height
-            val maxScroll = (totalHeight - visibleHeight).coerceAtLeast(0)
-            if (maxScroll <= 0) return@post
+        bibleScrollView.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                bibleScrollView.viewTreeObserver.removeOnGlobalLayoutListener(this)
 
-            val chapter = chapters.getOrNull(currentChapterIndex) ?: return@post
+                val childHeight = bibleScrollView.getChildAt(0)?.height ?: 0
+                val totalContentHeight = childHeight + bibleScrollView.paddingTop + bibleScrollView.paddingBottom
+                val visibleHeight = bibleScrollView.height
+                val maxScroll = (totalContentHeight - visibleHeight).coerceAtLeast(0)
+                if (maxScroll <= 0) return
 
-            // Speed multiplier: 0.5x (slow) to 2.5x (fast), default 1.0x
-            val speedMultiplier = prefs.getFloat("scroll_speed_multiplier", 1.0f).coerceIn(0.2f, 5.0f)
-            val baseDurationMs = (chapter.spokenText.length * 100L).coerceIn(3000L, 300000L)
-            val estimatedDurationMs = (baseDurationMs / speedMultiplier).toLong().coerceIn(2000L, 300000L)
+                val chapter = chapters.getOrNull(currentChapterIndex) ?: return
 
-            val startScroll = bibleScrollView.scrollY
-            scrollAnimator = ValueAnimator.ofInt(startScroll, maxScroll).apply {
-                duration = estimatedDurationMs
-                interpolator = LinearInterpolator()
-                addUpdateListener { animator ->
-                    val valY = animator.animatedValue as Int
-                    bibleScrollView.scrollTo(0, valY)
+                val speedMultiplier = prefs.getFloat("scroll_speed_multiplier", 1.0f).coerceIn(0.2f, 5.0f)
+                val baseDurationMs = (chapter.spokenText.length * 100L).coerceIn(3000L, 300000L)
+                val totalDurationMs = (baseDurationMs / speedMultiplier).toLong().coerceIn(2000L, 300000L)
+
+                val startScroll = if (resuming && pausedScrollY > 0) pausedScrollY else bibleScrollView.scrollY
+                val remainingRatio = if (maxScroll > startScroll) (maxScroll - startScroll).toFloat() / maxScroll.toFloat() else 0f
+                val remainingDurationMs = (totalDurationMs * remainingRatio).toLong().coerceIn(1000L, totalDurationMs)
+
+                scrollAnimator = ValueAnimator.ofInt(startScroll, maxScroll).apply {
+                    duration = remainingDurationMs
+                    interpolator = LinearInterpolator()
+                    // 새 장 시작 시(처음부터 읽을 때) 7.5초 대기 후 스크롤 시작
+                    if (!resuming) {
+                        startDelay = 7500L
+                    }
+                    addUpdateListener { animator ->
+                        val valY = animator.animatedValue as Int
+                        bibleScrollView.scrollTo(0, valY)
+                    }
+                    start()
                 }
-                start()
             }
-        }
+        })
     }
 
     private fun stopSmoothAutoScroll() {
@@ -201,7 +219,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             loadInitialAsset()
             setupVoiceFromPrefs()
             if (isPlaying) {
-                startSmoothAutoScrollForCurrentChapter()
+                startSmoothAutoScrollForCurrentChapter(true)
             }
             return
         }
@@ -214,11 +232,16 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 stopPlayback()
                 chapters = BibleTextParser.parse(text)
                 currentChapterIndex = 0
+                currentLineIndex = 0
+                pausedScrollY = 0
                 val rawName = uri.lastPathSegment ?: "선택한 파일"
                 bibleTitleTextView.text = rawName.removeSuffix(".txt")
                 updateCurrentChapterDisplay()
             } catch (error: Exception) {
                 chapters = emptyList()
+                currentChapterIndex = 0
+                currentLineIndex = 0
+                pausedScrollY = 0
                 bibleTextView.text = error.message ?: "텍스트 파일을 읽지 못했습니다."
             }
         }
@@ -252,6 +275,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private fun playOrPauseToggle() {
         if (!isTtsReady || chapters.isEmpty()) return
         if (isPlaying) {
+            pausedScrollY = bibleScrollView.scrollY
             textToSpeech.stop()
             isPlaying = false
             isPaused = true
@@ -263,38 +287,51 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             isPlaying = true
             playPauseToggleButton.setImageResource(R.drawable.ic_pause)
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            playCurrentChapter()
+            playCurrentChapter(resuming = true)
         } else {
             isPlaying = true
             isPaused = false
-            if (currentChapterIndex >= chapters.size) currentChapterIndex = 0
+            currentChapterIndex = 0
+            currentLineIndex = 0
+            pausedScrollY = 0
             playPauseToggleButton.setImageResource(R.drawable.ic_pause)
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            playCurrentChapter()
+            playCurrentChapter(resuming = false)
         }
     }
 
-    private fun playCurrentChapter() {
+    private fun playCurrentChapter(resuming: Boolean = false) {
         if (!isPlaying || currentChapterIndex >= chapters.size) return
         val chapter = chapters[currentChapterIndex]
         updateCurrentChapterDisplay()
-        bibleScrollView.scrollTo(0, 0)
-        startSmoothAutoScrollForCurrentChapter()
+
+        if (!resuming) {
+            currentLineIndex = 0
+            pausedScrollY = 0
+            bibleScrollView.scrollTo(0, 0)
+        } else {
+            bibleScrollView.scrollTo(0, pausedScrollY)
+        }
+        startSmoothAutoScrollForCurrentChapter(resuming)
 
         val lines = chapter.spokenText.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.isEmpty()) {
             currentChapterIndex++
-            playCurrentChapter()
+            currentLineIndex = 0
+            playCurrentChapter(false)
             return
         }
 
-        for ((lineIndex, line) in lines.withIndex()) {
-            val queueMode = if (lineIndex == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-            val isLastLine = (lineIndex == lines.size - 1)
+        val startLine = if (resuming) currentLineIndex.coerceIn(0, lines.size - 1) else 0
+
+        for (i in startLine until lines.size) {
+            val line = lines[i]
+            val queueMode = if (i == startLine) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+            val isLastLine = (i == lines.size - 1)
             val utteranceId = if (isLastLine) {
                 "chapter-done-$currentChapterIndex"
             } else {
-                "chapter-line-$currentChapterIndex-$lineIndex"
+                "chapter-line-$currentChapterIndex-$i"
             }
 
             textToSpeech.speak(line, queueMode, null, utteranceId)
@@ -309,14 +346,23 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     utteranceId.startsWith("chapter-line-") -> parts.getOrNull(2)?.toIntOrNull()
                     else -> null
                 }
+                val lineIdx = when {
+                    utteranceId.startsWith("chapter-line-") -> parts.getOrNull(3)?.toIntOrNull()
+                    utteranceId.startsWith("chapter-done-") -> lines.size - 1
+                    else -> null
+                }
 
                 if (chapIdx != null && chapIdx != currentChapterIndex) {
                     currentChapterIndex = chapIdx
+                    currentLineIndex = 0
+                    pausedScrollY = 0
                     runOnUiThread {
                         updateCurrentChapterDisplay()
                         bibleScrollView.scrollTo(0, 0)
-                        startSmoothAutoScrollForCurrentChapter()
+                        startSmoothAutoScrollForCurrentChapter(false)
                     }
+                } else if (lineIdx != null) {
+                    currentLineIndex = lineIdx
                 }
             }
 
@@ -328,12 +374,16 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                         runOnUiThread {
                             if (!isPlaying) return@runOnUiThread
                             currentChapterIndex++
+                            currentLineIndex = 0
+                            pausedScrollY = 0
                             if (currentChapterIndex < chapters.size) {
-                                playCurrentChapter()
+                                playCurrentChapter(false)
                             } else {
                                 isPlaying = false
                                 isPaused = false
                                 currentChapterIndex = 0
+                                currentLineIndex = 0
+                                pausedScrollY = 0
                                 stopSmoothAutoScroll()
                                 playPauseToggleButton.setImageResource(R.drawable.ic_play)
                                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -366,6 +416,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         isPlaying = false
         isPaused = false
         currentChapterIndex = 0
+        currentLineIndex = 0
+        pausedScrollY = 0
         textToSpeech.stop()
         stopSmoothAutoScroll()
         playPauseToggleButton.setImageResource(R.drawable.ic_play)
@@ -377,6 +429,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onDestroy() {
         isPlaying = false
         isPaused = false
+        currentLineIndex = 0
+        pausedScrollY = 0
         stopSmoothAutoScroll()
         if (::textToSpeech.isInitialized) {
             textToSpeech.stop()
@@ -384,7 +438,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         super.onDestroy()
-            }
+    }
 
     companion object {
         private const val REQUEST_OPEN_TEXT = 1001

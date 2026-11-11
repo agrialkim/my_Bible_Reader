@@ -46,14 +46,16 @@
             android:src="@drawable/ic_settings" />
     </LinearLayout>
 
-    <!-- 중앙 영역: 현재 읽고 있는 본문 표시 -->
+    <!-- 중앙 영역: 현재 읽고 있는 본문 표시 (하단 바에 가리지 않도록 하단 패딩 추가) -->
     <ScrollView
         android:id="@+id/bibleScrollView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:clipToPadding="false"
         android:fillViewport="true"
-        android:padding="16dp">
+        android:padding="16dp"
+        android:paddingBottom="100dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -68,6 +70,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:lineSpacingExtra="8dp"
+                android:justificationMode="inter_word"
+                android:breakStrategy="simple"
                 android:text="재생 버튼을 누르면 성경 본문이 여기에 실시간으로 표시됩니다."
                 android:textColor="#0F172A"
                 android:textSize="18sp" />
