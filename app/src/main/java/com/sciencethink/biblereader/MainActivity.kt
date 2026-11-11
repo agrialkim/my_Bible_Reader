@@ -379,15 +379,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                             if (currentChapterIndex < chapters.size) {
                                 playCurrentChapter(false)
                             } else {
-                                isPlaying = false
-                                isPaused = false
+                                // 모든 장을 다 읽었을 때 처음(0번째 장)부터 다시 시작
                                 currentChapterIndex = 0
                                 currentLineIndex = 0
                                 pausedScrollY = 0
-                                stopSmoothAutoScroll()
-                                playPauseToggleButton.setImageResource(R.drawable.ic_play)
-                                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                                currentPositionTextView.text = "읽기 완료"
+                                playCurrentChapter(false)
                             }
                         }
                     }
