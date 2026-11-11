@@ -13,7 +13,9 @@ import android.widget.ImageButton
 import android.widget.ScrollView
 import android.widget.TextView
 import android.app.AlertDialog
+import android.widget.Button
 import android.widget.EditText
+import android.widget.SeekBar
 import android.widget.Toast
 import java.io.File
 import java.nio.ByteBuffer
@@ -84,6 +86,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         utilityIconButton = findViewById(R.id.utilityIconButton)
 
         loadInitialAsset()
+        applyDisplaySettings()
 
         searchIconButton.setOnClickListener { showSearchDialog() }
         bibleTitleTextView.setOnClickListener { showBibleSelectionDialog() }
@@ -93,7 +96,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         playPauseToggleButton.setOnClickListener { playOrPauseToggle() }
         utilityIconButton.setOnClickListener {
-            // Utility action
+            showDisplaySettingsDialog()
         }
 
         textToSpeech = TextToSpeech(this, this)
@@ -113,6 +116,144 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 loadBible(selected)
             }
             .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun applyDisplaySettings(themeMode: String? = null) {
+        val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
+        val mode = themeMode ?: prefs.getString("theme_mode", "normal") ?: "normal"
+        val fontSize = prefs.getFloat("font_size", 12f)
+        
+        bibleTextView.textSize = fontSize
+        
+        val topBarLayout = findViewById<android.widget.LinearLayout>(R.id.topBarLayout)
+        val bottomBarLayout = findViewById<android.widget.LinearLayout>(R.id.bottomBarLayout)
+        val innerLayout = bibleScrollView.getChildAt(0) as? android.widget.LinearLayout
+        when (mode) {
+            "dark" -> {
+                topBarLayout.setBackgroundColor(android.graphics.Color.parseColor("#1E3A8A")) // 짙은 감청색
+                bottomBarLayout.setBackgroundColor(android.graphics.Color.parseColor("#1E3A8A"))
+                bibleScrollView.setBackgroundColor(android.graphics.Color.parseColor("#121212"))
+                innerLayout?.setBackgroundColor(android.graphics.Color.parseColor("#121212"))
+                bibleTextView.setTextColor(android.graphics.Color.parseColor("#E2E8F0"))
+            }
+            "bluelight" -> {
+                topBarLayout.setBackgroundColor(android.graphics.Color.parseColor("#2563EB")) // 원래 파란색
+                bottomBarLayout.setBackgroundColor(android.graphics.Color.parseColor("#2563EB"))
+                bibleScrollView.setBackgroundColor(android.graphics.Color.parseColor("#FFF9C4"))
+                innerLayout?.setBackgroundColor(android.graphics.Color.parseColor("#FFF9C4"))
+                bibleTextView.setTextColor(android.graphics.Color.parseColor("#333333"))
+            }
+            else -> { // normal
+                topBarLayout.setBackgroundColor(android.graphics.Color.parseColor("#2563EB"))
+                bottomBarLayout.setBackgroundColor(android.graphics.Color.parseColor("#2563EB"))
+                bibleScrollView.setBackgroundColor(android.graphics.Color.parseColor("#F8FAFC"))
+                innerLayout?.setBackgroundColor(android.graphics.Color.parseColor("#FFFFFF"))
+                bibleTextView.setTextColor(android.graphics.Color.parseColor("#0F172A"))
+            }
+        }
+    }
+
+    private fun showDisplaySettingsDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_display_settings, null)
+        val normalBtn = dialogView.findViewById<Button>(R.id.themeNormalBtn)
+        val darkBtn = dialogView.findViewById<Button>(R.id.themeDarkBtn)
+        val blueBtn = dialogView.findViewById<Button>(R.id.themeBlueBtn)
+        
+        val speedSeekBar = dialogView.findViewById<SeekBar>(R.id.displaySpeedSeekBar)
+        val speedValue = dialogView.findViewById<TextView>(R.id.displaySpeedValue)
+        
+        val delaySeekBar = dialogView.findViewById<SeekBar>(R.id.delaySeekBar)
+        val delayValue = dialogView.findViewById<TextView>(R.id.delayValue)
+        
+        val fontMinus = dialogView.findViewById<Button>(R.id.fontMinusBtn)
+        val fontPlus = dialogView.findViewById<Button>(R.id.fontPlusBtn)
+        val fontValue = dialogView.findViewById<TextView>(R.id.fontValueText)
+        
+        val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
+        var currentTheme = prefs.getString("theme_mode", "normal") ?: "normal"
+        
+        fun updateThemeUI(mode: String) {
+            val selectedBg = android.graphics.Color.parseColor("#94A3B8")
+            val unselectedBg = android.graphics.Color.parseColor("#E2E8F0")
+            
+            normalBtn.setBackgroundColor(if (mode == "normal") selectedBg else unselectedBg)
+            darkBtn.setBackgroundColor(if (mode == "dark") selectedBg else unselectedBg)
+            blueBtn.setBackgroundColor(if (mode == "bluelight") selectedBg else unselectedBg)
+            
+            normalBtn.setTextColor(if (mode == "normal") android.graphics.Color.WHITE else android.graphics.Color.BLACK)
+            darkBtn.setTextColor(if (mode == "dark") android.graphics.Color.WHITE else android.graphics.Color.BLACK)
+            blueBtn.setTextColor(if (mode == "bluelight") android.graphics.Color.WHITE else android.graphics.Color.BLACK)
+        }
+        
+        updateThemeUI(currentTheme)
+        
+        normalBtn.setOnClickListener { currentTheme = "normal"; updateThemeUI("normal"); applyDisplaySettings(currentTheme) }
+        darkBtn.setOnClickListener { currentTheme = "dark"; updateThemeUI("dark"); applyDisplaySettings(currentTheme) }
+        blueBtn.setOnClickListener { currentTheme = "bluelight"; updateThemeUI("bluelight"); applyDisplaySettings(currentTheme) }
+        
+        speedSeekBar.max = 20
+        val savedMultiplier = prefs.getFloat("scroll_speed_multiplier", 1.0f)
+        speedSeekBar.progress = ((savedMultiplier - 0.5f) * 10f).toInt().coerceIn(0, 20)
+        speedValue.text = String.format(java.util.Locale.US, "%.1f배", savedMultiplier)
+        
+        speedSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val multi = 0.5f + (progress * 0.1f)
+                speedValue.text = String.format(java.util.Locale.US, "%.1f배", multi)
+                prefs.edit().putFloat("scroll_speed_multiplier", multi).apply()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+        
+        delaySeekBar.max = 4 // 0, 1, 2, 3, 4 -> 0, 5, 10, 15, 20초
+        val savedDelay = prefs.getInt("initial_delay_sec", 15)
+        delaySeekBar.progress = savedDelay / 5
+        delayValue.text = "${savedDelay}초"
+        
+        delaySeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val sec = progress * 5
+                delayValue.text = "${sec}초"
+                prefs.edit().putInt("initial_delay_sec", sec).apply()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+        
+        var currentFont = prefs.getFloat("font_size", 12f)
+        fontValue.text = "${currentFont.toInt()}"
+        
+        val updateFont = {
+            fontValue.text = "${currentFont.toInt()}"
+            prefs.edit().putFloat("font_size", currentFont).apply()
+            applyDisplaySettings(currentTheme)
+        }
+        
+        fontMinus.setOnClickListener {
+            if (currentFont > 8f) {
+                currentFont -= 1f
+                updateFont()
+            }
+        }
+        fontPlus.setOnClickListener {
+            if (currentFont < 40f) {
+                currentFont += 1f
+                updateFont()
+            }
+        }
+        
+        AlertDialog.Builder(this)
+            .setTitle("화면 및 재생 설정")
+            .setView(dialogView)
+            .setPositiveButton("닫기") { _, _ -> 
+                prefs.edit().putString("theme_mode", currentTheme).apply()
+                if (isPlaying) {
+                    stopSmoothAutoScroll()
+                    startSmoothAutoScrollForCurrentChapter(true)
+                }
+            }
             .show()
     }
 
@@ -212,12 +353,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     duration = remainingDurationMs
                     interpolator = LinearInterpolator()
                     
+                    val savedDelayMs = prefs.getInt("initial_delay_sec", 15) * 1000L
                     if (forceDelayOnce > 0L) {
                         startDelay = forceDelayOnce
                         forceDelayOnce = 0L
                     } else if (!resuming) {
-                        // 새 장 시작 시(처음부터 읽을 때) 20초 대기 후 스크롤 시작
-                        startDelay = 20000L
+                        startDelay = savedDelayMs
                     }
                     addUpdateListener { animator ->
                         val valY = animator.animatedValue as Int
@@ -459,7 +600,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     bibleScrollView.scrollTo(0, 0)
                 }
                 
-                forceDelayOnce = 20000L // 검색이나 특정 위치로 이동 후 재생 시 20초 대기
+                val savedDelayMs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE).getInt("initial_delay_sec", 15) * 1000L
+                forceDelayOnce = savedDelayMs // 검색이나 특정 위치로 이동 후 재생 시 딜레이 대기
 
                 isPaused = true
                 isPlaying = false
@@ -557,7 +699,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             
             val isFromStart = currentLineIndex == 0
             if (isFromStart && forceDelayOnce == 0L) {
-                forceDelayOnce = 20000L
+                val savedDelayMs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE).getInt("initial_delay_sec", 15) * 1000L
+                forceDelayOnce = savedDelayMs
             }
             
             playCurrentChapter(resuming = !isFromStart)

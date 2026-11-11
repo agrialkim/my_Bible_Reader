@@ -6,8 +6,9 @@
     android:fitsSystemWindows="true"
     android:orientation="vertical">
 
-    <!-- 상단 파란색 띠 (상단바 아래에 위치) -->
+    <!-- 상단 띠 (상단바 아래에 위치) -->
     <LinearLayout
+        android:id="@+id/topBarLayout"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="#2563EB"
@@ -78,8 +79,9 @@
         </LinearLayout>
     </ScrollView>
 
-    <!-- 하단 파란색 띠 (Bottom Bar) -->
+    <!-- 하단 띠 (Bottom Bar) -->
     <LinearLayout
+        android:id="@+id/bottomBarLayout"
         android:layout_width="match_parent"
         android:layout_height="64dp"
         android:background="#2563EB"
@@ -108,14 +110,14 @@
             android:textSize="16sp"
             android:textStyle="bold" />
 
-        <!-- 오른쪽: 미정 우측 유틸리티 아이콘 -->
+        <!-- 오른쪽: 옵션 및 테마 설정 아이콘 -->
         <ImageButton
             android:id="@+id/utilityIconButton"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:contentDescription="유틸리티"
-            android:src="@drawable/ic_volume" />
+            android:contentDescription="테마 옵션"
+            android:src="@drawable/ic_menu" />
     </LinearLayout>
 
 </LinearLayout>
