@@ -299,13 +299,17 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             val lines = chapter.text.split("\n")
             val spannable = android.text.SpannableStringBuilder()
             
+            val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
+            val isDarkMode = prefs.getString("theme_mode", "normal") == "dark"
+            val highlightColor = if (isDarkMode) android.graphics.Color.parseColor("#334155") else android.graphics.Color.parseColor("#FFD1DC")
+            
             for ((index, line) in lines.withIndex()) {
                 val spacedLine = line.toCharArray().joinToString("\u200B")
                 val start = spannable.length
                 spannable.append(spacedLine)
                 if (index == highlightedLineIndex) {
                     spannable.setSpan(
-                        android.text.style.BackgroundColorSpan(android.graphics.Color.parseColor("#FFD1DC")), 
+                        android.text.style.BackgroundColorSpan(highlightColor), 
                         start,
                         spannable.length,
                         android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
