@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="직접 입력"
+        android:textStyle="bold"
+        android:textColor="#0F172A"
+        android:textSize="16sp" />
+
+    <EditText
+        android:id="@+id/searchEditText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="예: 창 1:5, 창세기 1장 5절"
+        android:padding="12dp"
+        android:background="#F1F5F9"
+        android:textColor="#334155" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="또는 분류 / 목록에서 선택"
+        android:textStyle="bold"
+        android:textColor="#0F172A"
+        android:textSize="16sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+
+        <Button
+            android:id="@+id/otCategoryButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:text="구약"
+            android:backgroundTint="#3B82F6"
+            android:textColor="#FFFFFF" />
+
+        <Button
+            android:id="@+id/ntCategoryButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:text="신약"
+            android:backgroundTint="#3B82F6"
+            android:textColor="#FFFFFF" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+
+        <Spinner
+            android:id="@+id/bookSpinner"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1.2"
+            android:layout_marginEnd="6dp"
+            android:padding="8dp"
+            android:background="#DCFCE7" />
+
+        <Spinner
+            android:id="@+id/chapterSpinner"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="0.9"
+            android:layout_marginEnd="6dp"
+            android:padding="8dp"
+            android:background="#DCFCE7" />
+
+        <Spinner
+            android:id="@+id/verseSpinner"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="0.9"
+            android:padding="8dp"
+            android:background="#DCFCE7" />
+    </LinearLayout>
+</LinearLayout>

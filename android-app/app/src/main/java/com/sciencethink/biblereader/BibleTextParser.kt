@@ -111,12 +111,15 @@ object BibleTextParser {
                 val verseDisplay = if (verseNumDisplay.isNotEmpty()) "$verseNumDisplay $rawVerse" else rawVerse
                 displayTextLines.add(verseDisplay)
                 
-                val verseInt = startVerse.toIntOrNull()
-                if (verseInt != null) {
-                    if (currentBook == null) {
-                        leadingVerseLineIndices[verseInt] = leadingSpokenLines.size
-                    } else {
-                        verseLineIndices[verseInt] = spokenTextLines.size
+                val verseStartInt = startVerse.toIntOrNull()
+                val verseEndInt = endVerse.toIntOrNull() ?: verseStartInt
+                if (verseStartInt != null && verseEndInt != null) {
+                    for (v in verseStartInt..verseEndInt) {
+                        if (currentBook == null) {
+                            leadingVerseLineIndices[v] = leadingSpokenLines.size
+                        } else {
+                            verseLineIndices[v] = spokenTextLines.size
+                        }
                     }
                 }
                 
