@@ -30,7 +30,7 @@ object BibleTextParser {
     )
 
     private val versePrefix = Regex(
-        """^\s*([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\s*(?:<([^>\r\n]*)>\s*)?"""
+        """^\s*([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\s*(?:<([^>\r\n]*)>)?\s*"""
     )
     private val parentheticalReference = Regex(
         """\(([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\)"""
@@ -62,10 +62,11 @@ object BibleTextParser {
                 continue
             }
 
-            val abbreviation = match.groupValues[1]
-            val chapter = match.groupValues[2].toInt()
-            val startVerse = match.groupValues[3]
-            val endVerse = match.groupValues[4]
+            val abbreviation = match.groupValues.getOrNull(1).orEmpty()
+            val chapter = match.groupValues.getOrNull(2)?.toIntOrNull() ?: 1
+            val startVerse = match.groupValues.getOrNull(3).orEmpty()
+            val endVerse = match.groupValues.getOrNull(4).orEmpty()
+            val title = match.groupValues.getOrNull(5).orEmpty().trim()
             val verseNumDisplay = if (endVerse.isNotEmpty()) "$startVerse-$endVerse" else startVerse
 
             if (abbreviation != currentBook || chapter != currentNumber) {
@@ -92,7 +93,6 @@ object BibleTextParser {
                 spokenTextLines.add("$bookName ${numberToKorean(chapter)}장.")
             }
 
-            val title = match.groupValues.getOrNull(5).orEmpty().trim()
             if (title.isNotEmpty()) {
                 displayTextLines.add(title)
                 spokenTextLines.add(formatReferences(title))
@@ -100,7 +100,8 @@ object BibleTextParser {
 
             val rawVerse = line.substring(match.range.last + 1).trim()
             if (rawVerse.isNotEmpty()) {
-                displayTextLines.add("$verseNumDisplay $rawVerse")
+                val verseDisplay = if (verseNumDisplay.isNotEmpty()) "$verseNumDisplay $rawVerse" else rawVerse
+                displayTextLines.add(verseDisplay)
                 spokenTextLines.add(formatReferences(rawVerse))
             }
         }
