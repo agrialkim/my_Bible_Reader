@@ -279,8 +279,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         saveCurrentReadingPosition()
     }
 
-    private fun markCurrentChapterAsRead() {
-        val chapter = chapters.getOrNull(currentChapterIndex) ?: return
+    private fun markChapterAsRead(chapIdx: Int) {
+        val chapter = chapters.getOrNull(chapIdx) ?: return
         val key = "${chapter.book}_${chapter.number}"
         val prefs = getSharedPreferences("bible_tracker_prefs", Context.MODE_PRIVATE)
         val readSet = prefs.getStringSet("read_chapters", emptySet())?.toMutableSet() ?: mutableSetOf()
@@ -317,8 +317,55 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val startDateTv = dialogView.findViewById<TextView>(R.id.trackerStartDateTextView)
         val lastDateTv = dialogView.findViewById<TextView>(R.id.trackerLastDateTextView)
         val containerLayout = dialogView.findViewById<android.widget.LinearLayout>(R.id.trackerContainerLayout)
+        val trackerScrollView = dialogView.findViewById<ScrollView>(R.id.trackerScrollView)
         val resetButton = dialogView.findViewById<Button>(R.id.trackerResetButton)
         val closeButton = dialogView.findViewById<Button>(R.id.trackerCloseButton)
+        val otCategoryBtn = dialogView.findViewById<Button>(R.id.otTrackerCategoryButton)
+        val ntCategoryBtn = dialogView.findViewById<Button>(R.id.ntTrackerCategoryButton)
+
+        val bookRowMap = mutableMapOf<String, android.view.View>()
+
+        val otCategories = arrayOf("모세오경", "역사서 (구약)", "시가서", "대선지서", "소선지서")
+        val ntCategories = arrayOf("복음서", "역사서 (신약)", "서신서", "예언서 (계시록)")
+
+        val categoryMap = mapOf(
+            "모세오경" to listOf("창세기", "출애굽기", "레위기", "민수기", "신명기"),
+            "역사서 (구약)" to listOf("여호수아", "사사기", "룻기", "사무엘상", "사무엘하", "열왕기상", "열왕기하", "역대상", "역대하", "에스라", "느헤미야", "에스더"),
+            "시가서" to listOf("욥기", "시편", "잠언", "전도서", "아가"),
+            "대선지서" to listOf("이사야", "예레미야", "예레미야애가", "에스겔", "다니엘"),
+            "소선지서" to listOf("호세아", "요엘", "아모스", "오바댜", "요나", "미가", "나훔", "하박국", "스바냐", "학개", "스가랴", "말라기"),
+            "복음서" to listOf("마태복음", "마가복음", "누가복음", "요한복음"),
+            "역사서 (신약)" to listOf("사도행전"),
+            "서신서" to listOf("로마서", "고린도전서", "고린도후서", "갈라디아서", "에베소서", "빌립보서", "골로새서", "데살로니가전서", "데살로니가후서", "디모데전서", "디모데후서", "디도서", "빌레몬서", "히브리서", "야고보서", "베드로전서", "베드로후서", "요한일서", "요한이서", "요한삼서", "유다서"),
+            "예언서 (계시록)" to listOf("요한계시록")
+        )
+
+        fun scrollToCategoryFirstBook(category: String) {
+            val firstBookName = categoryMap[category]?.firstOrNull() ?: return
+            val targetView = bookRowMap[firstBookName] ?: return
+            trackerScrollView.post {
+                val y = targetView.top
+                trackerScrollView.scrollTo(0, y)
+            }
+        }
+
+        otCategoryBtn.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("구약 분류 바로가기")
+                .setItems(otCategories) { _, which ->
+                    scrollToCategoryFirstBook(otCategories[which])
+                }
+                .show()
+        }
+
+        ntCategoryBtn.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("신약 분류 바로가기")
+                .setItems(ntCategories) { _, which ->
+                    scrollToCategoryFirstBook(ntCategories[which])
+                }
+                .show()
+        }
 
         fun updateDateDisplays() {
             val sDate = prefs.getString("start_date", "") ?: ""
@@ -329,6 +376,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
         fun renderTable() {
             containerLayout.removeAllViews()
+            bookRowMap.clear()
             val density = resources.displayMetrics.density
 
             for ((bookName, chapterCount) in BibleTrackerData.books) {
@@ -343,6 +391,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     layoutParams = lp
                     setBackgroundColor(android.graphics.Color.WHITE)
                 }
+
+                bookRowMap[bookName] = rowLayout
 
                 val bookTv = TextView(this).apply {
                     val lp = android.widget.LinearLayout.LayoutParams((70 * density).toInt(), android.widget.LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -525,7 +575,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val chapter = chapters.getOrNull(currentChapterIndex)
         if (chapter != null) {
             currentPositionTextView.text = "${chapter.book} ${chapter.number}장"
-            markCurrentChapterAsRead()
             
             val lines = chapter.text.split("\n")
             val spannable = android.text.SpannableStringBuilder()
@@ -959,6 +1008,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
         val lines = chapter.spokenText.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.isEmpty()) {
+            markChapterAsRead(currentChapterIndex)
             currentChapterIndex++
             currentLineIndex = 0
             playCurrentChapter(false)
@@ -1013,6 +1063,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 if (!isPlaying) return
                 if (utteranceId?.startsWith("chapter-done-") == true) {
                     val finishedChapIdx = utteranceId.substringAfter("chapter-done-").toIntOrNull()
+                    if (finishedChapIdx != null) {
+                        markChapterAsRead(finishedChapIdx)
+                    }
                     if (finishedChapIdx == currentChapterIndex) {
                         runOnUiThread {
                             if (!isPlaying) return@runOnUiThread
