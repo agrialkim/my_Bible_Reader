@@ -34,7 +34,7 @@ object BibleTextParser {
         """^\s*([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\s*(?:<([^>\r\n]*)>)?\s*"""
     )
     private val parentheticalReference = Regex(
-        """\(([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\)"""
+        """([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?"""
     )
 
     fun parse(source: String): List<BibleChapter> {
@@ -91,7 +91,7 @@ object BibleTextParser {
                 spokenTextLines = leadingSpokenLines.toMutableList()
                 leadingDisplayLines.clear()
                 leadingSpokenLines.clear()
-                
+
                 verseLineIndices.clear()
                 verseLineIndices.putAll(leadingVerseLineIndices)
                 leadingVerseLineIndices.clear()
@@ -110,7 +110,7 @@ object BibleTextParser {
             if (rawVerse.isNotEmpty()) {
                 val verseDisplay = if (verseNumDisplay.isNotEmpty()) "$verseNumDisplay $rawVerse" else rawVerse
                 displayTextLines.add(verseDisplay)
-                
+
                 val verseStartInt = startVerse.toIntOrNull()
                 val verseEndInt = endVerse.toIntOrNull() ?: verseStartInt
                 if (verseStartInt != null && verseEndInt != null) {
@@ -122,7 +122,7 @@ object BibleTextParser {
                         }
                     }
                 }
-                
+
                 spokenTextLines.add(formatReferences(rawVerse))
             }
         }
@@ -142,18 +142,20 @@ object BibleTextParser {
         return chapters
     }
 
-    private fun formatReferences(text: String): String =
-        parentheticalReference.replace(text) { match ->
+    private fun formatReferences(text: String): String {
+        val replaced = parentheticalReference.replace(text) { match ->
             val book = bookNames[match.groupValues[1]] ?: match.groupValues[1]
             val chapter = numberToKorean(match.groupValues[2].toInt())
             val start = numberToKorean(match.groupValues[3].toInt())
             val end = match.groupValues.getOrNull(4).orEmpty()
             if (end.isEmpty()) {
-                "($book ${chapter}장 ${start}절)"
+                "$book ${chapter}장 ${start}절"
             } else {
-                "($book ${chapter}장 ${start}에서 ${numberToKorean(end.toInt())}절)"
+                "$book ${chapter}장 ${start}에서 ${numberToKorean(end.toInt())}절"
             }
         }
+        return replaced.replace(";", ",")
+    }
 
     private fun numberToKorean(number: Int): String {
         if (number == 0) return "영"
