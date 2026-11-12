@@ -90,6 +90,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
         searchIconButton.setOnClickListener { showSearchDialog() }
         bibleTitleTextView.setOnClickListener { showBibleSelectionDialog() }
+        currentPositionTextView.setOnClickListener { showReadingTrackerDialog() }
         settingsIconButton.setOnClickListener {
             val intent = Intent(this, SettingsActivity::class.java)
             startActivityForResult(intent, REQUEST_SETTINGS)
@@ -278,6 +279,186 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         saveCurrentReadingPosition()
     }
 
+    private fun markCurrentChapterAsRead() {
+        val chapter = chapters.getOrNull(currentChapterIndex) ?: return
+        val key = "${chapter.book}_${chapter.number}"
+        val prefs = getSharedPreferences("bible_tracker_prefs", Context.MODE_PRIVATE)
+        val readSet = prefs.getStringSet("read_chapters", emptySet())?.toMutableSet() ?: mutableSetOf()
+
+        val today = java.text.SimpleDateFormat("yyyy.MM.dd", java.util.Locale.getDefault()).format(java.util.Date())
+        val startDate = prefs.getString("start_date", "") ?: ""
+
+        var changed = false
+        val editor = prefs.edit()
+        if (!readSet.contains(key)) {
+            readSet.add(key)
+            editor.putStringSet("read_chapters", readSet)
+            changed = true
+        }
+        if (startDate.isEmpty()) {
+            editor.putString("start_date", today)
+            changed = true
+        }
+        if (changed || prefs.getString("last_date", "") != today) {
+            editor.putString("last_date", today)
+            changed = true
+        }
+        if (changed) {
+            editor.apply()
+        }
+    }
+
+    private fun showReadingTrackerDialog() {
+        val prefs = getSharedPreferences("bible_tracker_prefs", Context.MODE_PRIVATE)
+        val originalReadSet = prefs.getStringSet("read_chapters", emptySet())?.toSet() ?: emptySet()
+        val currentReadSet = originalReadSet.toMutableSet()
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_reading_tracker, null)
+        val startDateTv = dialogView.findViewById<TextView>(R.id.trackerStartDateTextView)
+        val lastDateTv = dialogView.findViewById<TextView>(R.id.trackerLastDateTextView)
+        val containerLayout = dialogView.findViewById<android.widget.LinearLayout>(R.id.trackerContainerLayout)
+        val resetButton = dialogView.findViewById<Button>(R.id.trackerResetButton)
+        val closeButton = dialogView.findViewById<Button>(R.id.trackerCloseButton)
+
+        fun updateDateDisplays() {
+            val sDate = prefs.getString("start_date", "") ?: ""
+            val lDate = prefs.getString("last_date", "") ?: ""
+            startDateTv.text = "읽기 시작한 날짜: " + if (sDate.isNotEmpty()) sDate else "-"
+            lastDateTv.text = "최근에 읽은 날짜: " + if (lDate.isNotEmpty()) lDate else "-"
+        }
+
+        fun renderTable() {
+            containerLayout.removeAllViews()
+            val density = resources.displayMetrics.density
+
+            for ((bookName, chapterCount) in BibleTrackerData.books) {
+                val rowLayout = android.widget.LinearLayout(this).apply {
+                    orientation = android.widget.LinearLayout.HORIZONTAL
+                    setPadding((4 * density).toInt(), (4 * density).toInt(), (4 * density).toInt(), (4 * density).toInt())
+                    val lp = android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                    lp.setMargins(0, 0, 0, (4 * density).toInt())
+                    layoutParams = lp
+                    setBackgroundColor(android.graphics.Color.WHITE)
+                }
+
+                val bookTv = TextView(this).apply {
+                    val lp = android.widget.LinearLayout.LayoutParams((70 * density).toInt(), android.widget.LinearLayout.LayoutParams.WRAP_CONTENT)
+                    layoutParams = lp
+                    text = bookName
+                    textSize = 10f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    setTextColor(android.graphics.Color.parseColor("#0F172A"))
+                    setPadding(0, (4 * density).toInt(), (4 * density).toInt(), 0)
+                }
+                rowLayout.addView(bookTv)
+
+                val flowLayout = FlowLayout(this).apply {
+                    val lp = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f)
+                    layoutParams = lp
+                }
+
+                for (ch in 1..chapterCount) {
+                    val key = "${bookName}_$ch"
+                    val chTv = TextView(this).apply {
+                        text = "$ch"
+                        textSize = 8f
+                        setTypeface(null, android.graphics.Typeface.BOLD)
+                        setPadding((6 * density).toInt(), (3 * density).toInt(), (6 * density).toInt(), (3 * density).toInt())
+                        
+                        val lp = android.view.ViewGroup.MarginLayoutParams(
+                            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                            android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                        )
+                        lp.setMargins((2 * density).toInt(), (2 * density).toInt(), (2 * density).toInt(), (2 * density).toInt())
+                        layoutParams = lp
+                    }
+
+                    fun applyState(isRead: Boolean) {
+                        if (isRead) {
+                            chTv.setBackgroundColor(android.graphics.Color.parseColor("#2563EB")) // 진한 파란색
+                            chTv.setTextColor(android.graphics.Color.WHITE)
+                        } else {
+                            chTv.setBackgroundColor(android.graphics.Color.parseColor("#FCE7F3")) // 연한 분홍색
+                            chTv.setTextColor(android.graphics.Color.parseColor("#9D174D"))
+                        }
+                    }
+
+                    applyState(currentReadSet.contains(key))
+
+                    chTv.setOnClickListener {
+                        if (currentReadSet.contains(key)) {
+                            currentReadSet.remove(key)
+                            applyState(false)
+                        } else {
+                            currentReadSet.add(key)
+                            applyState(true)
+                        }
+                    }
+
+                    flowLayout.addView(chTv)
+                }
+
+                rowLayout.addView(flowLayout)
+                containerLayout.addView(rowLayout)
+            }
+        }
+
+        updateDateDisplays()
+        renderTable()
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        resetButton.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("성경 읽기 표 초기화")
+                .setMessage("읽기 표와 날짜를 모두 초기화하시겠습니까?")
+                .setPositiveButton("초기화") { _, _ ->
+                    currentReadSet.clear()
+                    prefs.edit()
+                        .remove("read_chapters")
+                        .remove("start_date")
+                        .remove("last_date")
+                        .apply()
+                    updateDateDisplays()
+                    renderTable()
+                    Toast.makeText(this, "성경 읽기 표가 초기화되었습니다.", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("취소", null)
+                .show()
+        }
+
+        fun saveChangesIfNeeded() {
+            if (originalReadSet != currentReadSet) {
+                val today = java.text.SimpleDateFormat("yyyy.MM.dd", java.util.Locale.getDefault()).format(java.util.Date())
+                val startDate = prefs.getString("start_date", "") ?: ""
+                
+                val editor = prefs.edit()
+                editor.putStringSet("read_chapters", currentReadSet)
+                if (startDate.isEmpty() && currentReadSet.isNotEmpty()) {
+                    editor.putString("start_date", today)
+                }
+                editor.putString("last_date", today)
+                editor.apply()
+            }
+        }
+
+        closeButton.setOnClickListener {
+            saveChangesIfNeeded()
+            dialog.dismiss()
+        }
+
+        dialog.setOnDismissListener {
+            saveChangesIfNeeded()
+        }
+
+        dialog.show()
+    }
+
     private fun loadInitialAsset() {
         val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
         val savedName = prefs.getString("selected_bible_name", "개역개정.txt") ?: "개역개정.txt"
@@ -344,6 +525,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val chapter = chapters.getOrNull(currentChapterIndex)
         if (chapter != null) {
             currentPositionTextView.text = "${chapter.book} ${chapter.number}장"
+            markCurrentChapterAsRead()
             
             val lines = chapter.text.split("\n")
             val spannable = android.text.SpannableStringBuilder()

@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F8FAFC"
+    android:orientation="vertical">
+
+    <!-- 상단 띠 Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#2563EB"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="12dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="성경 읽기 표"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/trackerResetButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:backgroundTint="#EF4444"
+            android:paddingHorizontal="12dp"
+            android:text="Reset"
+            android:textColor="#FFFFFF"
+            android:textSize="8sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- 날짜 및 범례 정보 Bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#EFF6FF"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="12dp">
+
+        <!-- 좌측: 날짜 정보 -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/trackerStartDateTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="읽기 시작한 날짜: -"
+                android:textColor="#1E40AF"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/trackerLastDateTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="최근에 읽은 날짜: -"
+                android:textColor="#1E40AF"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- 우측: 범례 (Color Legend) -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="#2563EB"
+                android:text="읽음"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="3dp"
+                android:layout_marginEnd="6dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="#FCE7F3"
+                android:text="안 읽음"
+                android:textColor="#9D174D"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="3dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 본문 읽기표 목록 (ScrollView) -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="8dp">
+
+        <LinearLayout
+            android:id="@+id/trackerContainerLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
+    <!-- 하단 닫기 버튼 -->
+    <Button
+        android:id="@+id/trackerCloseButton"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:backgroundTint="#2563EB"
+        android:text="닫기"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+</LinearLayout>
