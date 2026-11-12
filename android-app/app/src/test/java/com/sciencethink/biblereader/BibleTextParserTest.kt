@@ -26,7 +26,7 @@ class BibleTextParserTest {
             chapters[2].text
         )
         assertEquals(
-            "사사기 일장.\n옷니엘이 드빌을 치다(여호수아 십오장 십삼에서 십구절)\n드빌의 주민들을 쳤으니",
+            "사사기 1장.\n옷니엘이 드빌을 치다 여호수아 15장 13 에서 19절\n드빌의 주민들을 쳤으니",
             chapters[2].spokenText
         )
     }
@@ -52,7 +52,7 @@ class BibleTextParserTest {
         assertEquals("마태복음", chapters[1].book)
         assertEquals(1, chapters[1].number)
         assertEquals(
-            "마태복음 일장.\n예수 그리스도의 계보\n아브라함과 다윗의 자손 예수 그리스도의 계보라",
+            "마태복음 1장.\n예수 그리스도의 계보\n아브라함과 다윗의 자손 예수 그리스도의 계보라",
             chapters[1].spokenText
         )
     }
