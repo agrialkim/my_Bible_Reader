@@ -51,6 +51,10 @@ class BibleTextParserTest {
 
         assertEquals("마태복음", chapters[1].book)
         assertEquals(1, chapters[1].number)
+        assertEquals(
+            "마태복음 일장.\n예수 그리스도의 계보\n아브라함과 다윗의 자손 예수 그리스도의 계보라",
+            chapters[1].spokenText
+        )
     }
 
     @Test
