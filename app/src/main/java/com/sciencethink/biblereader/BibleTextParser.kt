@@ -33,9 +33,9 @@ object BibleTextParser {
     private val versePrefix = Regex(
         """^\s*([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\s*(?:<([^>\r\n]*)>)?\s*"""
     )
-    private val parentheticalReference = Regex(
-        """([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?"""
-    )
+    private val bracketRegex = Regex("""\(([^)]+)\)""")
+    private val patternA = Regex("""^\s*([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(.+)$""")
+    private val patternB = Regex("""^\s*(\d{1,3})\s*:\s*(.+)$""")
 
     fun parse(source: String): List<BibleChapter> {
         val chapters = mutableListOf<BibleChapter>()
@@ -98,7 +98,7 @@ object BibleTextParser {
 
                 val bookName = bookNames[abbreviation] ?: abbreviation
                 displayTextLines.add("$bookName ${chapter}장")
-                spokenTextLines.add("$bookName ${numberToKorean(chapter)}장.")
+                spokenTextLines.add("$bookName ${chapter}장.")
             }
 
             if (title.isNotEmpty()) {
@@ -143,28 +143,85 @@ object BibleTextParser {
     }
 
     private fun formatReferences(text: String): String {
-        val replaced = parentheticalReference.replace(text) { match ->
-            val book = bookNames[match.groupValues[1]] ?: match.groupValues[1]
-            val chapter = numberToKorean(match.groupValues[2].toInt())
-            val start = numberToKorean(match.groupValues[3].toInt())
-            val end = match.groupValues.getOrNull(4).orEmpty()
-            if (end.isEmpty()) {
-                "$book ${chapter}장 ${start}절"
-            } else {
-                "$book ${chapter}장 ${start}에서 ${numberToKorean(end.toInt())}절"
-            }
-        }
-        return replaced.replace(";", ",")
+        return bracketRegex.replace(text) { match ->
+            val content = match.groupValues[1]
+            val parsed = parseBracketContent(content)
+            if (parsed.isNotEmpty()) " $parsed " else ""
+        }.replace(Regex("""\s+"""), " ").trim()
     }
 
-    private fun numberToKorean(number: Int): String {
-        if (number == 0) return "영"
-        val digits = listOf("", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구")
-        val units = listOf("", "십", "백")
-        return number.toString().reversed().mapIndexedNotNull { position, char ->
-            val digit = char.digitToInt()
-            if (digit == 0) null
-            else (if (digit == 1 && position > 0) "" else digits[digit]) + units[position]
-        }.asReversed().joinToString("")
+    private fun parseBracketContent(content: String): String {
+        val sections = content.split(";")
+        var lastBook: String? = null
+        var lastChapter: Int? = null
+        val resultList = mutableListOf<String>()
+
+        for (section in sections) {
+            val subSections = section.split(",")
+            for (sub in subSections) {
+                val trimmed = sub.trim()
+                if (trimmed.isEmpty()) continue
+
+                var book: String? = null
+                var chapter: Int? = null
+                var versePart: String = trimmed
+
+                val matchA = patternA.find(trimmed)
+                if (matchA != null) {
+                    val rawBook = matchA.groupValues[1]
+                    book = bookNames[rawBook] ?: rawBook
+                    chapter = matchA.groupValues[2].toIntOrNull()
+                    versePart = matchA.groupValues[3].trim()
+                } else {
+                    val matchB = patternB.find(trimmed)
+                    if (matchB != null) {
+                        chapter = matchB.groupValues[1].toIntOrNull()
+                        versePart = matchB.groupValues[2].trim()
+                    }
+                }
+
+                val isBookChanged = book != null && book != lastBook
+                val isChapterChanged = chapter != null && chapter != lastChapter
+
+                if (book != null) lastBook = book
+                if (chapter != null) lastChapter = chapter
+
+                val formattedVerse = formatVersePart(versePart)
+                if (formattedVerse.isEmpty()) continue
+
+                val currentBook = lastBook
+                val currentChapter = lastChapter
+
+                val prefix = when {
+                    isBookChanged && currentBook != null && currentChapter != null -> "$currentBook ${currentChapter}장 "
+                    isChapterChanged && currentChapter != null -> "${currentChapter}장 "
+                    else -> ""
+                }
+
+                resultList.add("$prefix$formattedVerse")
+            }
+        }
+
+        return if (resultList.isNotEmpty()) {
+            resultList.joinToString(" ")
+        } else {
+            content
+        }
+    }
+
+    private fun formatVersePart(versePart: String): String {
+        if (versePart.isEmpty()) return ""
+        val dashIndex = versePart.indexOf('-')
+        return if (dashIndex != -1) {
+            val start = versePart.substring(0, dashIndex).trim()
+            val end = versePart.substring(dashIndex + 1).trim()
+            if (start.isNotEmpty() && end.isNotEmpty()) {
+                "$start 에서 ${end}절"
+            } else {
+                "${versePart}절"
+            }
+        } else {
+            "${versePart}절"
+        }
     }
 }
