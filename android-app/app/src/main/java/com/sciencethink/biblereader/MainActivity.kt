@@ -113,7 +113,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
                 prefs.edit().putString("selected_bible_name", selected.name)
                             .putBoolean("selected_bible_is_asset", selected.isAsset).apply()
-                loadBible(selected)
+                loadBible(selected, keepSameChapter = true)
             }
             .setNegativeButton("취소", null)
             .show()
@@ -257,16 +257,40 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             .show()
     }
 
+    private fun saveCurrentReadingPosition() {
+        if (chapters.isEmpty()) return
+        val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
+        val currentY = if (::bibleScrollView.isInitialized) bibleScrollView.scrollY else pausedScrollY
+        prefs.edit()
+            .putInt("last_chapter_index", currentChapterIndex)
+            .putInt("last_line_index", currentLineIndex)
+            .putInt("last_scroll_y", currentY)
+            .apply()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        saveCurrentReadingPosition()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        saveCurrentReadingPosition()
+    }
+
     private fun loadInitialAsset() {
         val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
         val savedName = prefs.getString("selected_bible_name", "개역개정.txt") ?: "개역개정.txt"
         val isAsset = prefs.getBoolean("selected_bible_is_asset", true)
         
         val bible = BibleFile(savedName, isAsset, if (!isAsset) File(File(filesDir, "imported_bibles"), savedName) else null)
-        loadBible(bible)
+        loadBible(bible, restorePosition = true)
     }
 
-    private fun loadBible(bible: BibleFile) {
+    private fun loadBible(bible: BibleFile, restorePosition: Boolean = false, keepSameChapter: Boolean = false) {
+        val targetBook = if (keepSameChapter) chapters.getOrNull(currentChapterIndex)?.book else null
+        val targetNumber = if (keepSameChapter) chapters.getOrNull(currentChapterIndex)?.number else null
+
         try {
             val bytes = if (bible.isAsset) {
                 assets.open(bible.name).use { it.readBytes() }
@@ -275,12 +299,37 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             }
             val text = decodeText(bytes)
             chapters = BibleTextParser.parse(text)
-            currentChapterIndex = 0
-            currentLineIndex = 0
-            pausedScrollY = 0
+
+            val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
+            if (restorePosition) {
+                val savedChap = prefs.getInt("last_chapter_index", 0)
+                currentChapterIndex = savedChap.coerceIn(0, (chapters.size - 1).coerceAtLeast(0))
+                currentLineIndex = prefs.getInt("last_line_index", 0)
+                pausedScrollY = prefs.getInt("last_scroll_y", 0)
+            } else if (keepSameChapter && targetBook != null && targetNumber != null) {
+                val matchIdx = chapters.indexOfFirst { it.book == targetBook && it.number == targetNumber }
+                currentChapterIndex = if (matchIdx != -1) matchIdx else currentChapterIndex.coerceIn(0, (chapters.size - 1).coerceAtLeast(0))
+                currentLineIndex = 0
+                pausedScrollY = 0
+            } else {
+                currentChapterIndex = 0
+                currentLineIndex = 0
+                pausedScrollY = 0
+            }
+
             val displayName = bible.name.removeSuffix(".txt")
             bibleTitleTextView.text = displayName
             updateCurrentChapterDisplay()
+
+            if (restorePosition && pausedScrollY > 0) {
+                bibleScrollView.post {
+                    bibleScrollView.scrollTo(0, pausedScrollY)
+                }
+            } else {
+                bibleScrollView.post {
+                    bibleScrollView.scrollTo(0, 0)
+                }
+            }
         } catch (error: Exception) {
             chapters = emptyList()
             currentChapterIndex = 0
