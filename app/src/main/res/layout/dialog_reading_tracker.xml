@@ -103,8 +103,43 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- 구약/신약 대분류 바로가기 버튼 Bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#EFF6FF"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingBottom="10dp">
+
+        <Button
+            android:id="@+id/otTrackerCategoryButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:backgroundTint="#3B82F6"
+            android:text="구약 분류"
+            android:textColor="#FFFFFF"
+            android:textSize="8sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/ntTrackerCategoryButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:backgroundTint="#3B82F6"
+            android:text="신약 분류"
+            android:textColor="#FFFFFF"
+            android:textSize="8sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
     <!-- 본문 읽기표 목록 (ScrollView) -->
     <ScrollView
+        android:id="@+id/trackerScrollView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
