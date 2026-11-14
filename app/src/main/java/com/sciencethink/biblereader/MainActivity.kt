@@ -46,6 +46,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var scrollAnimator: ValueAnimator? = null
     private var highlightedLineIndex: Int? = null
     private var forceDelayOnce: Long = 0L
+    private var backPressedTime: Long = 0L
 
     data class BibleFile(val name: String, val isAsset: Boolean, val file: java.io.File? = null)
 
@@ -130,28 +131,58 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val topBarLayout = findViewById<android.widget.LinearLayout>(R.id.topBarLayout)
         val bottomBarLayout = findViewById<android.widget.LinearLayout>(R.id.bottomBarLayout)
         val innerLayout = bibleScrollView.getChildAt(0) as? android.widget.LinearLayout
+        val topBarColor: Int
+        val bottomBarColor: Int
         when (mode) {
             "dark" -> {
-                topBarLayout.setBackgroundColor(android.graphics.Color.parseColor("#1E3A8A")) // 짙은 감청색
-                bottomBarLayout.setBackgroundColor(android.graphics.Color.parseColor("#1E3A8A"))
+                topBarColor = android.graphics.Color.parseColor("#1E3A8A") // 짙은 감청색
+                bottomBarColor = android.graphics.Color.parseColor("#1E3A8A")
+                topBarLayout.setBackgroundColor(topBarColor)
+                bottomBarLayout.setBackgroundColor(bottomBarColor)
                 bibleScrollView.setBackgroundColor(android.graphics.Color.parseColor("#121212"))
                 innerLayout?.setBackgroundColor(android.graphics.Color.parseColor("#121212"))
                 bibleTextView.setTextColor(android.graphics.Color.parseColor("#E2E8F0"))
             }
             "bluelight" -> {
-                topBarLayout.setBackgroundColor(android.graphics.Color.parseColor("#2563EB")) // 원래 파란색
-                bottomBarLayout.setBackgroundColor(android.graphics.Color.parseColor("#2563EB"))
+                topBarColor = android.graphics.Color.parseColor("#2563EB") // 원래 파란색
+                bottomBarColor = android.graphics.Color.parseColor("#2563EB")
+                topBarLayout.setBackgroundColor(topBarColor)
+                bottomBarLayout.setBackgroundColor(bottomBarColor)
                 bibleScrollView.setBackgroundColor(android.graphics.Color.parseColor("#FFF9C4"))
                 innerLayout?.setBackgroundColor(android.graphics.Color.parseColor("#FFF9C4"))
                 bibleTextView.setTextColor(android.graphics.Color.parseColor("#333333"))
             }
             else -> { // normal
-                topBarLayout.setBackgroundColor(android.graphics.Color.parseColor("#2563EB"))
-                bottomBarLayout.setBackgroundColor(android.graphics.Color.parseColor("#2563EB"))
+                topBarColor = android.graphics.Color.parseColor("#2563EB")
+                bottomBarColor = android.graphics.Color.parseColor("#2563EB")
+                topBarLayout.setBackgroundColor(topBarColor)
+                bottomBarLayout.setBackgroundColor(bottomBarColor)
                 bibleScrollView.setBackgroundColor(android.graphics.Color.parseColor("#F8FAFC"))
                 innerLayout?.setBackgroundColor(android.graphics.Color.parseColor("#FFFFFF"))
                 bibleTextView.setTextColor(android.graphics.Color.parseColor("#0F172A"))
             }
+        }
+
+        window.statusBarColor = topBarColor
+        window.navigationBarColor = bottomBarColor
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            window.insetsController?.setSystemBarsAppearance(
+                0,
+                android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                        android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            var flags = window.decorView.systemUiVisibility
+            @Suppress("DEPRECATION")
+            flags = flags and android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+            @Suppress("DEPRECATION")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                flags = flags and android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR.inv()
+            }
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = flags
         }
     }
 
@@ -1116,6 +1147,23 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         updateCurrentChapterDisplay()
         bibleScrollView.scrollTo(0, 0)
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        if (isPlaying) {
+            playOrPauseToggle()
+            backPressedTime = System.currentTimeMillis()
+            Toast.makeText(this, "'뒤로' 버튼을 한 번 더 누르면 종료됩니다.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (System.currentTimeMillis() - backPressedTime < 2000L) {
+            super.onBackPressed()
+        } else {
+            backPressedTime = System.currentTimeMillis()
+            Toast.makeText(this, "'뒤로' 버튼을 한 번 더 누르면 종료됩니다.", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onDestroy() {
