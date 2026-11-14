@@ -26,7 +26,7 @@ class BibleTextParserTest {
             chapters[2].text
         )
         assertEquals(
-            "사사기 1장.\n옷니엘이 드빌을 치다 여호수아 15장 13 에서 19절\n드빌의 주민들을 쳤으니",
+            "사사기 일장.\n옷니엘이 드빌을 치다 여호수아 십오장 십삼절에서 십구절\n드빌의 주민들을 쳤으니",
             chapters[2].spokenText
         )
     }
@@ -52,9 +52,25 @@ class BibleTextParserTest {
         assertEquals("마태복음", chapters[1].book)
         assertEquals(1, chapters[1].number)
         assertEquals(
-            "마태복음 1장.\n예수 그리스도의 계보\n아브라함과 다윗의 자손 예수 그리스도의 계보라",
+            "마태복음 일장.\n예수 그리스도의 계보\n아브라함과 다윗의 자손 예수 그리스도의 계보라",
             chapters[1].spokenText
         )
+    }
+
+    @Test
+    fun convertsBibleReferencesAndNumbersToKorean() {
+        val sampleText = """
+            마16:27 인자가 아버지의 영광으로 그 천사들과 함께 오리니
+            창1:1 태초에 하나님이 천지를 창조하시니라
+        """.trimIndent()
+
+        val chapters = BibleTextParser.parse(sampleText)
+        assertEquals("마태복음 십육장.", chapters[0].spokenText.split("\n")[0])
+        assertEquals("창세기 일장.", chapters[1].spokenText.split("\n")[0])
+        assertEquals("일", BibleTextParser.numberToKorean(1))
+        assertEquals("십육", BibleTextParser.numberToKorean(16))
+        assertEquals("이십칠", BibleTextParser.numberToKorean(27))
+        assertEquals("백오십", BibleTextParser.numberToKorean(150))
     }
 
     @Test

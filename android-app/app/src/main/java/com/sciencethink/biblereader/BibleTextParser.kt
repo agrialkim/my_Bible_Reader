@@ -30,6 +30,35 @@ object BibleTextParser {
         "요이" to "요한이서", "요삼" to "요한삼서", "유" to "유다서", "계" to "요한계시록"
     )
 
+    fun numberToKorean(num: Int): String {
+        if (num <= 0) return num.toString()
+        val units = arrayOf("", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구")
+        if (num < 10) return units[num]
+
+        val sb = StringBuilder()
+        val thousand = num / 1000
+        val hundred = (num % 1000) / 100
+        val ten = (num % 100) / 10
+        val one = num % 10
+
+        if (thousand > 0) {
+            if (thousand > 1) sb.append(units[thousand])
+            sb.append("천")
+        }
+        if (hundred > 0) {
+            if (hundred > 1) sb.append(units[hundred])
+            sb.append("백")
+        }
+        if (ten > 0) {
+            if (ten > 1) sb.append(units[ten])
+            sb.append("십")
+        }
+        if (one > 0) {
+            sb.append(units[one])
+        }
+        return sb.toString()
+    }
+
     private val versePrefix = Regex(
         """^\s*([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\s*(?:<([^>\r\n]*)>)?\s*"""
     )
@@ -98,7 +127,7 @@ object BibleTextParser {
 
                 val bookName = bookNames[abbreviation] ?: abbreviation
                 displayTextLines.add("$bookName ${chapter}장")
-                spokenTextLines.add("$bookName ${chapter}장.")
+                spokenTextLines.add("$bookName ${numberToKorean(chapter)}장.")
             }
 
             if (title.isNotEmpty()) {
@@ -143,11 +172,41 @@ object BibleTextParser {
     }
 
     private fun formatReferences(text: String): String {
-        return bracketRegex.replace(text) { match ->
+        val bracketFormatted = bracketRegex.replace(text) { match ->
             val content = match.groupValues[1]
             val parsed = parseBracketContent(content)
             if (parsed.isNotEmpty()) " $parsed " else ""
-        }.replace(Regex("""\s+"""), " ").trim()
+        }
+
+        val refPattern = Regex("""([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?""")
+        val expandedRef = refPattern.replace(bracketFormatted) { match ->
+            val rawBook = match.groupValues[1]
+            val book = bookNames[rawBook] ?: rawBook
+            val chap = match.groupValues[2].toIntOrNull() ?: 1
+            val startV = match.groupValues[3].toIntOrNull() ?: 1
+            val endV = match.groupValues[4].toIntOrNull()
+
+            val chapKor = numberToKorean(chap)
+            val startVKor = numberToKorean(startV)
+
+            if (endV != null) {
+                val endVKor = numberToKorean(endV)
+                "$book ${chapKor}장 ${startVKor}절에서 ${endVKor}절"
+            } else {
+                "$book ${chapKor}장 ${startVKor}절"
+            }
+        }
+
+        val withChapKor = Regex("""(\d+)장""").replace(expandedRef) { match ->
+            val num = match.groupValues[1].toIntOrNull()
+            if (num != null) "${numberToKorean(num)}장" else match.value
+        }
+        val withVerseKor = Regex("""(\d+)절""").replace(withChapKor) { match ->
+            val num = match.groupValues[1].toIntOrNull()
+            if (num != null) "${numberToKorean(num)}절" else match.value
+        }
+
+        return withVerseKor.replace(Regex("""\s+"""), " ").trim()
     }
 
     private fun parseBracketContent(content: String): String {
@@ -193,8 +252,8 @@ object BibleTextParser {
                 val currentChapter = lastChapter
 
                 val prefix = when {
-                    isBookChanged && currentBook != null && currentChapter != null -> "$currentBook ${currentChapter}장 "
-                    isChapterChanged && currentChapter != null -> "${currentChapter}장 "
+                    isBookChanged && currentBook != null && currentChapter != null -> "$currentBook ${numberToKorean(currentChapter)}장 "
+                    isChapterChanged && currentChapter != null -> "${numberToKorean(currentChapter)}장 "
                     else -> ""
                 }
 
@@ -213,15 +272,21 @@ object BibleTextParser {
         if (versePart.isEmpty()) return ""
         val dashIndex = versePart.indexOf('-')
         return if (dashIndex != -1) {
-            val start = versePart.substring(0, dashIndex).trim()
-            val end = versePart.substring(dashIndex + 1).trim()
-            if (start.isNotEmpty() && end.isNotEmpty()) {
-                "$start 에서 ${end}절"
+            val startStr = versePart.substring(0, dashIndex).trim()
+            val endStr = versePart.substring(dashIndex + 1).trim()
+            val startNum = startStr.toIntOrNull()
+            val endNum = endStr.toIntOrNull()
+            if (startNum != null && endNum != null) {
+                "${numberToKorean(startNum)}절에서 ${numberToKorean(endNum)}절"
+            } else if (startStr.isNotEmpty() && endStr.isNotEmpty()) {
+                "$startStr 에서 ${endStr}절"
             } else {
-                "${versePart}절"
+                val num = versePart.toIntOrNull()
+                if (num != null) "${numberToKorean(num)}절" else "${versePart}절"
             }
         } else {
-            "${versePart}절"
+            val num = versePart.toIntOrNull()
+            if (num != null) "${numberToKorean(num)}절" else "${versePart}절"
         }
     }
 }

@@ -22,6 +22,20 @@ class SettingsActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
+        val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
+        val mode = prefs.getString("theme_mode", "normal") ?: "normal"
+        val barColor = if (mode == "dark") android.graphics.Color.parseColor("#1E3A8A") else android.graphics.Color.parseColor("#2563EB")
+        window.statusBarColor = barColor
+        window.navigationBarColor = barColor
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            window.insetsController?.setSystemBarsAppearance(
+                0,
+                android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                        android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+            )
+        }
+
         importBibleButton = findViewById(R.id.importBibleButton)
         settingsVoiceSpinner = findViewById(R.id.settingsVoiceSpinner)
         autoScrollSwitch = findViewById(R.id.autoScrollSwitch)
@@ -40,7 +54,6 @@ class SettingsActivity : Activity() {
 
         setupSpinners()
 
-        val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
         autoScrollSwitch.isChecked = prefs.getBoolean("auto_scroll_enabled", true)
 
         saveOptionsButton.setOnClickListener {
