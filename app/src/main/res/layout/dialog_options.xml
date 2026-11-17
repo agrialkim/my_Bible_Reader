@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#FFFFFF"
+    android:orientation="vertical">
+
+    <!-- 상단 타이틀 바 (위 왼쪽: ← / 가운데: 옵션 설정) -->
+    <RelativeLayout
+        android:id="@+id/optionsTopBar"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:background="#2563EB"
+        android:paddingHorizontal="8dp">
+
+        <Button
+            android:id="@+id/optionsBackButton"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:text="←"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:text="옵션 설정"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+    </RelativeLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <!-- 1. 화면 모드 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="화면 모드"
+            android:textColor="#0F172A"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/optionsThemeNormalBtn"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="3dp"
+                android:layout_weight="1"
+                android:background="#E2E8F0"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="0dp"
+                android:singleLine="true"
+                android:text="일반"
+                android:textColor="#0F172A"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/optionsThemeDarkBtn"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginHorizontal="3dp"
+                android:layout_weight="1"
+                android:background="#E2E8F0"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="0dp"
+                android:singleLine="true"
+                android:text="다크"
+                android:textColor="#0F172A"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/optionsThemeBlueBtn"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="3dp"
+                android:layout_weight="1"
+                android:background="#E2E8F0"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="0dp"
+                android:singleLine="true"
+                android:text="블루라이트"
+                android:textColor="#0F172A"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- 2. 외부 성경 텍스트 추가 가져오기 -->
+        <Button
+            android:id="@+id/optionsImportBibleBtn"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="18dp"
+            android:backgroundTint="#475569"
+            android:text="+ 외부 성경 텍스트 추가 가져오기"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <!-- 3. 음성 목소리 선택 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="음성 목소리 선택"
+            android:textColor="#0F172A"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/optionsVoiceSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="#F1F5F9"
+            android:minHeight="44dp"
+            android:padding="8dp" />
+
+        <!-- 4. 참조 구절 읽기 (괄호 안 성경 장절) -->
+        <Switch
+            android:id="@+id/optionsReadReferenceSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:checked="true"
+            android:text="참조 구절 읽기 (괄호 안 성경 장절)"
+            android:textColor="#0F172A"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <!-- 5. 자동 스크롤 기능 사용 -->
+        <Switch
+            android:id="@+id/optionsAutoScrollSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:checked="true"
+            android:text="자동 스크롤 기능 사용"
+            android:textColor="#0F172A"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- 하단 영역 (아래 오른쪽: 닫기 버튼 박스) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:paddingHorizontal="16dp"
+        android:paddingBottom="14dp">
+
+        <Button
+            android:id="@+id/optionsCloseButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="72dp"
+            android:minHeight="38dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:backgroundTint="#0D9488"
+            android:paddingHorizontal="18dp"
+            android:paddingVertical="8dp"
+            android:text="닫기"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+</LinearLayout>

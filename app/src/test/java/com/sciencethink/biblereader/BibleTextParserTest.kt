@@ -32,6 +32,22 @@ class BibleTextParserTest {
     }
 
     @Test
+    fun skipsParentheticalReferencesWhenReadReferencesIsFalse() {
+        val sampleText = "삿1:11 <옷니엘이 드빌을 치다(수 15:13-19)> 드빌의 주민들을 쳤으니"
+        val chaptersRead = BibleTextParser.parse(sampleText, readReferences = true)
+        val chaptersSkip = BibleTextParser.parse(sampleText, readReferences = false)
+
+        assertEquals(
+            "사사기 일장.\n옷니엘이 드빌을 치다 여호수아 십오장 십삼절에서 십구절\n드빌의 주민들을 쳤으니",
+            chaptersRead[0].spokenText
+        )
+        assertEquals(
+            "사사기 일장.\n옷니엘이 드빌을 치다\n드빌의 주민들을 쳤으니",
+            chaptersSkip[0].spokenText
+        )
+    }
+
+    @Test
     fun parsesGenesisAndMatthewVersesCorrectly() {
         val sampleText = """
             창1:1 <천지 창조> 태초에 하나님이 천지를 창조하시니라

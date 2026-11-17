@@ -66,7 +66,7 @@ object BibleTextParser {
     private val patternA = Regex("""^\s*([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(.+)$""")
     private val patternB = Regex("""^\s*(\d{1,3})\s*:\s*(.+)$""")
 
-    fun parse(source: String): List<BibleChapter> {
+    fun parse(source: String, readReferences: Boolean = true): List<BibleChapter> {
         val chapters = mutableListOf<BibleChapter>()
         var currentBook: String? = null
         var currentNumber: Int? = null
@@ -81,7 +81,7 @@ object BibleTextParser {
             val match = versePrefix.find(line)
             if (match == null) {
                 val cleanedDisplay = line.trim()
-                val cleanedSpoken = formatReferences(line.trim())
+                val cleanedSpoken = formatReferences(line.trim(), readReferences)
                 if (cleanedDisplay.isNotEmpty()) {
                     if (currentBook == null) {
                         leadingDisplayLines.add(cleanedDisplay)
@@ -132,7 +132,7 @@ object BibleTextParser {
 
             if (title.isNotEmpty()) {
                 displayTextLines.add(title)
-                spokenTextLines.add(formatReferences(title))
+                spokenTextLines.add(formatReferences(title, readReferences))
             }
 
             val rawVerse = line.substring(match.range.last + 1).trim()
@@ -152,7 +152,7 @@ object BibleTextParser {
                     }
                 }
 
-                spokenTextLines.add(formatReferences(rawVerse))
+                spokenTextLines.add(formatReferences(rawVerse, readReferences))
             }
         }
 
@@ -171,11 +171,15 @@ object BibleTextParser {
         return chapters
     }
 
-    private fun formatReferences(text: String): String {
-        val bracketFormatted = bracketRegex.replace(text) { match ->
-            val content = match.groupValues[1]
-            val parsed = parseBracketContent(content)
-            if (parsed.isNotEmpty()) " $parsed " else ""
+    private fun formatReferences(text: String, readReferences: Boolean = true): String {
+        val bracketFormatted = if (readReferences) {
+            bracketRegex.replace(text) { match ->
+                val content = match.groupValues[1]
+                val parsed = parseBracketContent(content)
+                if (parsed.isNotEmpty()) " $parsed " else ""
+            }
+        } else {
+            bracketRegex.replace(text, "")
         }
 
         val refPattern = Regex("""([가-힣]{1,8})\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?""")

@@ -80,11 +80,40 @@
                 android:minHeight="48dp"
                 android:padding="8dp" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="본문 서체 (글꼴) 선택"
+                android:textColor="#0F172A"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <Spinner
+                android:id="@+id/settingsFontSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="#FFFFFF"
+                android:minHeight="48dp"
+                android:padding="8dp" />
+
+            <Switch
+                android:id="@+id/readReferenceSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:checked="true"
+                android:text="참조 구절 읽기 (괄호 안 성경 장절)"
+                android:textColor="#0F172A"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
             <Switch
                 android:id="@+id/autoScrollSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="28dp"
+                android:layout_marginTop="20dp"
                 android:checked="true"
                 android:text="자동 스크롤 기능 사용"
                 android:textColor="#0F172A"

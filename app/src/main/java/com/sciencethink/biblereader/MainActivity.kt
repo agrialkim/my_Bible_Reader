@@ -13,9 +13,14 @@ import android.widget.ImageButton
 import android.widget.ScrollView
 import android.widget.TextView
 import android.app.AlertDialog
+import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.SeekBar
+import android.widget.Spinner
 import android.widget.Toast
 import java.io.File
 import java.nio.ByteBuffer
@@ -125,8 +130,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
         val mode = themeMode ?: prefs.getString("theme_mode", "normal") ?: "normal"
         val fontSize = prefs.getFloat("font_size", 12f)
-        
+        val fontKey = prefs.getString("font_family", "nanum_gothic") ?: "nanum_gothic"
+
         bibleTextView.textSize = fontSize
+        bibleTextView.typeface = FontUtils.getFontTypeface(this, fontKey)
         
         val topBarLayout = findViewById<android.widget.LinearLayout>(R.id.topBarLayout)
         val bottomBarLayout = findViewById<android.widget.LinearLayout>(R.id.bottomBarLayout)
@@ -192,6 +199,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val darkBtn = dialogView.findViewById<Button>(R.id.themeDarkBtn)
         val blueBtn = dialogView.findViewById<Button>(R.id.themeBlueBtn)
         
+        val fontFamilySpinner = dialogView.findViewById<Spinner>(R.id.fontFamilySpinner)
+        val fontPreviewCard = dialogView.findViewById<LinearLayout>(R.id.fontPreviewCard)
+        val fontPreviewTextView = dialogView.findViewById<TextView>(R.id.fontPreviewTextView)
+
         val speedSeekBar = dialogView.findViewById<SeekBar>(R.id.displaySpeedSeekBar)
         val speedValue = dialogView.findViewById<TextView>(R.id.displaySpeedValue)
         
@@ -204,7 +215,40 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         
         val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
         var currentTheme = prefs.getString("theme_mode", "normal") ?: "normal"
+        var currentFont = prefs.getFloat("font_size", 12f)
         
+        val fontAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, FontUtils.fontNames).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        fontFamilySpinner.adapter = fontAdapter
+        val savedFontKey = prefs.getString("font_family", "nanum_gothic") ?: "nanum_gothic"
+        val fontIndex = FontUtils.fontKeys.indexOf(savedFontKey).let { if (it >= 0) it else 0 }
+        fontFamilySpinner.setSelection(fontIndex)
+
+        fun updatePreview() {
+            val selectedFontIndex = fontFamilySpinner.selectedItemPosition.coerceIn(0, FontUtils.fontKeys.size - 1)
+            val selectedFontKey = FontUtils.fontKeys[selectedFontIndex]
+            val typeface = FontUtils.getFontTypeface(this@MainActivity, selectedFontKey)
+
+            fontPreviewTextView.textSize = currentFont
+            fontPreviewTextView.typeface = typeface
+
+            when (currentTheme) {
+                "dark" -> {
+                    fontPreviewCard.setBackgroundColor(android.graphics.Color.parseColor("#1E293B"))
+                    fontPreviewTextView.setTextColor(android.graphics.Color.parseColor("#F8FAFC"))
+                }
+                "bluelight" -> {
+                    fontPreviewCard.setBackgroundColor(android.graphics.Color.parseColor("#FFFBEB"))
+                    fontPreviewTextView.setTextColor(android.graphics.Color.parseColor("#333333"))
+                }
+                else -> { // normal
+                    fontPreviewCard.setBackgroundColor(android.graphics.Color.parseColor("#F8FAFC"))
+                    fontPreviewTextView.setTextColor(android.graphics.Color.parseColor("#0F172A"))
+                }
+            }
+        }
+
         fun updateThemeUI(mode: String) {
             val selectedBg = android.graphics.Color.parseColor("#94A3B8")
             val unselectedBg = android.graphics.Color.parseColor("#E2E8F0")
@@ -216,6 +260,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             normalBtn.setTextColor(if (mode == "normal") android.graphics.Color.WHITE else android.graphics.Color.BLACK)
             darkBtn.setTextColor(if (mode == "dark") android.graphics.Color.WHITE else android.graphics.Color.BLACK)
             blueBtn.setTextColor(if (mode == "bluelight") android.graphics.Color.WHITE else android.graphics.Color.BLACK)
+            
+            updatePreview()
         }
         
         updateThemeUI(currentTheme)
@@ -224,6 +270,16 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         darkBtn.setOnClickListener { currentTheme = "dark"; updateThemeUI("dark"); applyDisplaySettings(currentTheme) }
         blueBtn.setOnClickListener { currentTheme = "bluelight"; updateThemeUI("bluelight"); applyDisplaySettings(currentTheme) }
         
+        fontFamilySpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val selectedKey = FontUtils.fontKeys.getOrNull(position) ?: "nanum_gothic"
+                prefs.edit().putString("font_family", selectedKey).apply()
+                updatePreview()
+                applyDisplaySettings(currentTheme)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
         speedSeekBar.max = 20
         val savedMultiplier = prefs.getFloat("scroll_speed_multiplier", 1.0f)
         speedSeekBar.progress = ((savedMultiplier - 0.5f) * 10f).toInt().coerceIn(0, 20)
@@ -254,12 +310,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
         
-        var currentFont = prefs.getFloat("font_size", 12f)
         fontValue.text = "${currentFont.toInt()}"
         
         val updateFont = {
             fontValue.text = "${currentFont.toInt()}"
             prefs.edit().putFloat("font_size", currentFont).apply()
+            updatePreview()
             applyDisplaySettings(currentTheme)
         }
         
@@ -560,9 +616,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 bible.file?.readBytes() ?: throw Exception("파일이 없습니다.")
             }
             val text = decodeText(bytes)
-            chapters = BibleTextParser.parse(text)
-
             val prefs = getSharedPreferences("bible_prefs", Context.MODE_PRIVATE)
+            val readReferences = prefs.getBoolean("read_reference_enabled", true)
+            chapters = BibleTextParser.parse(text, readReferences)
             if (restorePosition) {
                 val savedChap = prefs.getInt("last_chapter_index", 0)
                 currentChapterIndex = savedChap.coerceIn(0, (chapters.size - 1).coerceAtLeast(0))

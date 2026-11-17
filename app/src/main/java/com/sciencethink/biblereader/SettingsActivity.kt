@@ -14,6 +14,8 @@ import java.io.File
 class SettingsActivity : Activity() {
     private lateinit var importBibleButton: Button
     private lateinit var settingsVoiceSpinner: Spinner
+    private lateinit var settingsFontSpinner: Spinner
+    private lateinit var readReferenceSwitch: Switch
     private lateinit var autoScrollSwitch: Switch
     private lateinit var saveOptionsButton: Button
     private lateinit var backButton: Button
@@ -38,6 +40,8 @@ class SettingsActivity : Activity() {
 
         importBibleButton = findViewById(R.id.importBibleButton)
         settingsVoiceSpinner = findViewById(R.id.settingsVoiceSpinner)
+        settingsFontSpinner = findViewById(R.id.settingsFontSpinner)
+        readReferenceSwitch = findViewById(R.id.readReferenceSwitch)
         autoScrollSwitch = findViewById(R.id.autoScrollSwitch)
         saveOptionsButton = findViewById(R.id.saveOptionsButton)
         backButton = findViewById(R.id.backButton)
@@ -54,11 +58,17 @@ class SettingsActivity : Activity() {
 
         setupSpinners()
 
+        readReferenceSwitch.isChecked = prefs.getBoolean("read_reference_enabled", true)
         autoScrollSwitch.isChecked = prefs.getBoolean("auto_scroll_enabled", true)
 
         saveOptionsButton.setOnClickListener {
             val editor = prefs.edit()
             editor.putInt("voice_index", settingsVoiceSpinner.selectedItemPosition)
+            
+            val selectedFontPos = settingsFontSpinner.selectedItemPosition.coerceIn(0, FontUtils.fontKeys.size - 1)
+            editor.putString("font_family", FontUtils.fontKeys[selectedFontPos])
+            
+            editor.putBoolean("read_reference_enabled", readReferenceSwitch.isChecked)
             editor.putBoolean("auto_scroll_enabled", autoScrollSwitch.isChecked)
             editor.apply()
 
@@ -99,6 +109,14 @@ class SettingsActivity : Activity() {
             }
             settingsVoiceSpinner.adapter = voiceAdapter
             settingsVoiceSpinner.setSelection(prefs.getInt("voice_index", 0))
+
+            val fontAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, FontUtils.fontNames).apply {
+                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+            settingsFontSpinner.adapter = fontAdapter
+            val savedFontKey = prefs.getString("font_family", "nanum_gothic") ?: "nanum_gothic"
+            val fontIndex = FontUtils.fontKeys.indexOf(savedFontKey).let { if (it >= 0) it else 0 }
+            settingsFontSpinner.setSelection(fontIndex)
         } catch (_: Exception) {
         }
     }
